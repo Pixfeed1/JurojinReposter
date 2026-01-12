@@ -23,7 +23,8 @@ from core.scheduler import (
 )
 from core.selector import select_best_article
 from ai.groq_client import generate_accroche
-from publishers.ayrshare import publish_article
+from publishers.twitter_direct import publish_to_twitter
+from publishers.ayrshare import publish_article as publish_to_facebook
 
 
 def setup_logging():
@@ -82,14 +83,22 @@ def process_platform(platform: str, logger: logging.Logger) -> bool:
     )
     logger.info(f"Generated accroche: {accroche}")
 
-    # Publish
-    success = publish_article(
-        article_id=article['id'],
-        article_url=article['url'],
-        accroche=accroche,
-        platform=platform,
-        image_url=article.get('image_url')
-    )
+    # Publish using appropriate publisher
+    if platform == 'twitter':
+        success = publish_to_twitter(
+            article_id=article['id'],
+            article_url=article['url'],
+            accroche=accroche,
+            image_url=article.get('image_url')
+        )
+    else:
+        success = publish_to_facebook(
+            article_id=article['id'],
+            article_url=article['url'],
+            accroche=accroche,
+            platform=platform,
+            image_url=article.get('image_url')
+        )
 
     if success:
         logger.info(f"Successfully posted to {platform}")
@@ -118,13 +127,22 @@ def process_retries(logger: logging.Logger) -> int:
     for item in items_to_retry:
         logger.info(f"Retrying: {item['title']} on {item['platform']} (attempt {item['attempts'] + 1})")
 
-        success = publish_article(
-            article_id=item['article_id'],
-            article_url=item['url'],
-            accroche=item['accroche'],
-            platform=item['platform'],
-            image_url=item.get('image_url')
-        )
+        platform = item['platform']
+        if platform == 'twitter':
+            success = publish_to_twitter(
+                article_id=item['article_id'],
+                article_url=item['url'],
+                accroche=item['accroche'],
+                image_url=item.get('image_url')
+            )
+        else:
+            success = publish_to_facebook(
+                article_id=item['article_id'],
+                article_url=item['url'],
+                accroche=item['accroche'],
+                platform=platform,
+                image_url=item.get('image_url')
+            )
 
         if success:
             update_queue_status(item['id'], 'completed')

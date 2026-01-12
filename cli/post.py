@@ -20,7 +20,8 @@ from config.settings import LOG_PATH
 from core.database import init_database, get_article_by_id
 from core.selector import select_best_article, get_article_eligibility
 from ai.groq_client import generate_accroche
-from publishers.ayrshare import publish_article
+from publishers.twitter_direct import publish_to_twitter
+from publishers.ayrshare import publish_article as publish_to_facebook
 
 
 def setup_logging():
@@ -95,14 +96,26 @@ def main():
 
     # Publish
     logger.info(f"Publishing to {args.platform}...")
-    success = publish_article(
-        article_id=article['id'],
-        article_url=article['url'],
-        accroche=accroche,
-        platform=args.platform,
-        image_url=article.get('image_url'),
-        dry_run=args.dry_run
-    )
+
+    if args.platform == 'twitter':
+        # Use direct Twitter API
+        success = publish_to_twitter(
+            article_id=article['id'],
+            article_url=article['url'],
+            accroche=accroche,
+            image_url=article.get('image_url'),
+            dry_run=args.dry_run
+        )
+    else:
+        # Use Ayrshare for Facebook
+        success = publish_to_facebook(
+            article_id=article['id'],
+            article_url=article['url'],
+            accroche=accroche,
+            platform=args.platform,
+            image_url=article.get('image_url'),
+            dry_run=args.dry_run
+        )
 
     if success:
         logger.info("Post successful!")
