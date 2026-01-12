@@ -78,7 +78,7 @@ def get_groq_client() -> Optional[Groq]:
 
 SYSTEM_PROMPT = """Tu es un community manager pour Jurojin.net, blog tech/3D/CGI.
 Ton : expert decontracte, jamais putaclic.
-Pas de hashtags, pas d'emojis excessifs (1-2 max par tweet).
+Pas d'emojis excessifs (1-2 max par tweet).
 Ne numerote PAS les tweets (pas de 1/4, 2/4, etc.)"""
 
 
@@ -90,7 +90,9 @@ Format :
 Tweet 1 (max 240 chars) : Hook accrocheur, donne envie de lire la suite. Termine par →
 Tweet 2 (max 240 chars) : Premier point cle ou fait interessant
 Tweet 3 (max 240 chars) : Deuxieme point cle ou insight
-Tweet 4 (max 200 chars) : Conclusion + "[LIEN]" a la fin
+Tweet 4 (max 200 chars) : Conclusion + "[LIEN]" + 2-3 hashtags pertinents (3D, Blender, VFX, cinema, etc.)
+
+IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Pas plus de 3 hashtags.
 
 Reponds UNIQUEMENT avec les 4 tweets separes par ---"""
 
@@ -102,7 +104,9 @@ Extrait : {excerpt}
 Format :
 Tweet 1 (max 240 chars) : Hook accrocheur
 Tweet 2 (max 240 chars) : Point cle principal
-Tweet 3 (max 200 chars) : Conclusion + "[LIEN]" a la fin
+Tweet 3 (max 200 chars) : Conclusion + "[LIEN]" + 2-3 hashtags pertinents (3D, Blender, VFX, cinema, etc.)
+
+IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Pas plus de 3 hashtags.
 
 Reponds UNIQUEMENT avec les 3 tweets separes par ---"""
 
@@ -110,8 +114,10 @@ Reponds UNIQUEMENT avec les 3 tweets separes par ---"""
 SIMPLE_PROMPT = """Genere une accroche Twitter pour cet article.
 Titre : {title}
 Extrait : {excerpt}
-Max 240 caracteres.
+Max 240 caracteres (hashtags inclus).
 {previous_note}
+
+Termine avec 2-3 hashtags pertinents (en rapport avec le sujet : 3D, Blender, cinema, VFX, etc.). Pas plus de 3 hashtags.
 
 Reponds uniquement avec l'accroche, sans guillemets ni explication."""
 
@@ -211,24 +217,24 @@ def generate_simple_groq(client: Groq, title: str, excerpt: str,
         return None
 
 
-# Fallback templates
+# Fallback templates (avec hashtags sur le dernier tweet/tweet simple)
 THREAD_FALLBACK_3 = [
     "{title} - un article qui merite votre attention →",
     "Voici ce qu'il faut retenir de cet article complet sur le sujet.",
-    "L'article complet a decouvrir ici [LIEN]"
+    "L'article complet a decouvrir ici [LIEN] #3D #CGI"
 ]
 
 THREAD_FALLBACK_4 = [
     "{title} - un sujet passionnant a decouvrir →",
     "Premier point cle : cet article couvre en profondeur tous les aspects du sujet.",
     "Deuxieme point : des conseils pratiques et des exemples concrets.",
-    "Pour aller plus loin, l'article complet est ici [LIEN]"
+    "Pour aller plus loin, l'article complet est ici [LIEN] #3D #VFX"
 ]
 
 SIMPLE_FALLBACK = [
-    "{title} - a relire sur Jurojin",
-    "Un article qui merite qu'on y revienne : {title}",
-    "{title} - toujours d'actualite",
+    "{title} - a relire sur Jurojin #3D #CGI",
+    "Un article qui merite qu'on y revienne : {title} #Blender #3D",
+    "{title} - toujours d'actualite #VFX #3D",
 ]
 
 

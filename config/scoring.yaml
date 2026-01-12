@@ -46,3 +46,50 @@ twitter_format:
   thread_3:
     min_score: 100
     min_word_count: 1000
+
+# Hashtags suggérés par catégorie
+# Le modèle IA choisira parmi ceux-ci selon le contexte
+suggested_hashtags:
+  3d:
+    - "#3D"
+    - "#3DArt"
+    - "#CGI"
+    - "#3DModeling"
+  blender:
+    - "#Blender"
+    - "#Blender3D"
+    - "#B3D"
+    - "#BlenderArt"
+  cinema:
+    - "#Cinema"
+    - "#Film"
+    - "#Moviemaking"
+    - "#Cinematography"
+  vfx:
+    - "#VFX"
+    - "#VisualEffects"
+    - "#CompositeArt"
+    - "#MotionGraphics"
+  animation:
+    - "#Animation"
+    - "#MotionDesign"
+    - "#Animated"
+    - "#CharacterAnimation"
+  gamedev:
+    - "#GameDev"
+    - "#IndieGame"
+    - "#GameArt"
+    - "#UnrealEngine"
+  design:
+    - "#Design"
+    - "#DigitalArt"
+    - "#CreativeDesign"
+    - "#GraphicDesign"
+  tutorial:
+    - "#Tutorial"
+    - "#HowTo"
+    - "#LearnBlender"
+    - "#3DTutorial"
+
+# Configuration des threads par semaine (2 threads recommandés)
+weekly_threads_target: 2
