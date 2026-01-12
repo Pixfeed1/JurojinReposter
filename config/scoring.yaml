@@ -34,3 +34,15 @@ weights:
 min_repost_interval:
   twitter: 90
   facebook: 90
+
+# Twitter format thresholds
+# thread_4: 4 tweets pour les articles longs et bien notés
+# thread_3: 3 tweets pour les articles moyens
+# simple: 1 tweet pour le reste
+twitter_format:
+  thread_4:
+    min_score: 120
+    min_word_count: 1500
+  thread_3:
+    min_score: 100
+    min_word_count: 1000

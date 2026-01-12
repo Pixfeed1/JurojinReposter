@@ -174,6 +174,115 @@ def post_tweet(text: str, image_url: Optional[str] = None,
         }
 
 
+def post_thread(tweets: list, article_url: str, image_url: Optional[str] = None,
+                dry_run: bool = False) -> dict:
+    """
+    Post a thread to Twitter (each tweet replies to the previous one).
+
+    Args:
+        tweets: List of tweet texts
+        article_url: URL to replace [LIEN] placeholder in last tweet
+        image_url: Optional image URL (attached to first tweet only)
+        dry_run: If True, don't actually post
+
+    Returns:
+        dict with 'success', 'tweet_ids', 'error' keys
+    """
+    if not tweets:
+        return {
+            'success': False,
+            'tweet_ids': [],
+            'error': 'No tweets provided'
+        }
+
+    # Replace [LIEN] in the last tweet
+    processed_tweets = tweets.copy()
+    if processed_tweets:
+        processed_tweets[-1] = processed_tweets[-1].replace('[LIEN]', article_url)
+
+    if dry_run:
+        logger.info(f"[DRY RUN] Would post thread of {len(processed_tweets)} tweets:")
+        for i, tweet in enumerate(processed_tweets):
+            logger.info(f"  Tweet {i+1}: {tweet[:50]}...")
+        if image_url:
+            logger.info(f"[DRY RUN] With image on first tweet: {image_url}")
+        return {
+            'success': True,
+            'tweet_ids': ['dry_run'] * len(processed_tweets),
+            'error': None
+        }
+
+    client = get_twitter_client()
+    if not client:
+        return {
+            'success': False,
+            'tweet_ids': [],
+            'error': 'Twitter credentials not configured'
+        }
+
+    # Handle image upload for first tweet
+    media_ids = None
+    if image_url:
+        api_v1 = get_twitter_api_v1()
+        if api_v1:
+            image_path = download_image(image_url)
+            if image_path:
+                try:
+                    media_id = upload_media(api_v1, image_path)
+                    if media_id:
+                        media_ids = [media_id]
+                        logger.info(f"Uploaded media for thread: {media_id}")
+                finally:
+                    try:
+                        os.unlink(image_path)
+                    except Exception:
+                        pass
+
+    tweet_ids = []
+    previous_tweet_id = None
+
+    try:
+        for i, tweet_text in enumerate(processed_tweets):
+            # First tweet gets the image, subsequent tweets reply to previous
+            kwargs = {'text': tweet_text}
+
+            if i == 0 and media_ids:
+                kwargs['media_ids'] = media_ids
+            if previous_tweet_id:
+                kwargs['in_reply_to_tweet_id'] = previous_tweet_id
+
+            response = client.create_tweet(**kwargs)
+            tweet_id = response.data['id']
+            tweet_ids.append(tweet_id)
+            previous_tweet_id = tweet_id
+
+            logger.info(f"Posted tweet {i+1}/{len(processed_tweets)}: {tweet_id}")
+
+        logger.info(f"Thread posted successfully: {len(tweet_ids)} tweets")
+        return {
+            'success': True,
+            'tweet_ids': tweet_ids,
+            'error': None
+        }
+
+    except tweepy.TweepyException as e:
+        error_msg = str(e)
+        logger.error(f"Twitter API error posting thread: {error_msg}")
+        return {
+            'success': False,
+            'tweet_ids': tweet_ids,  # Return any tweets that were posted
+            'error': error_msg
+        }
+    except Exception as e:
+        error_msg = f"Unexpected error posting thread: {str(e)}"
+        logger.error(error_msg)
+        return {
+            'success': False,
+            'tweet_ids': tweet_ids,
+            'error': error_msg
+        }
+
+
 def publish_to_twitter(article_id: int, article_url: str, accroche: str,
                        image_url: Optional[str] = None,
                        dry_run: bool = False) -> bool:

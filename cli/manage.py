@@ -75,6 +75,14 @@ def show_stats():
         for platform, count in stats['reposts_by_platform'].items():
             print(f"  {platform}: {count}")
 
+    if stats.get('reposts_by_format'):
+        print("\nTwitter posts by format:")
+        for format_type, data in stats['reposts_by_format'].items():
+            print(f"  {format_type}: {data['count']} posts ({data['total_posts']} tweets total)")
+
+    if stats.get('total_tweets'):
+        print(f"\nTotal tweets posted: {stats['total_tweets']}")
+
     print(f"\nPending in queue:   {stats['pending_queue']}")
     print(f"Failed in queue:    {stats['failed_queue']}")
     print()
@@ -121,9 +129,13 @@ def show_history(limit: int):
     for item in history:
         status = "OK" if item['success'] else "FAILED"
         posted_at = datetime.fromisoformat(item['posted_at']).strftime('%Y-%m-%d %H:%M')
-        print(f"[{status}] {posted_at} - {item['platform']}")
+        format_info = ""
+        if item.get('format') and item['platform'] == 'twitter':
+            posts_count = item.get('posts_count', 1)
+            format_info = f" [{item['format']}: {posts_count} tweet(s)]"
+        print(f"[{status}] {posted_at} - {item['platform']}{format_info}")
         print(f"    {item['title'][:60]}...")
-        print(f"    Accroche: {item['accroche'][:60]}...")
+        print(f"    Accroche: {item['accroche'][:60]}..." if item['accroche'] else "")
         if not item['success'] and item['error_message']:
             print(f"    Error: {item['error_message'][:60]}")
         print()

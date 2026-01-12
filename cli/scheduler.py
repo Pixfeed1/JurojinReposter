@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import LOG_PATH
-from core.database import init_database, update_queue_status
+from core.database import init_database, update_queue_status, add_repost, get_previous_accroches
 from core.scheduler import (
     is_scheduled_time,
     should_post_today,
@@ -23,7 +23,8 @@ from core.scheduler import (
 )
 from core.selector import select_best_article
 from ai.groq_client import generate_accroche
-from publishers.twitter_direct import publish_to_twitter
+from ai.thread_generator import generate_twitter_content
+from publishers.twitter_direct import post_thread, post_tweet
 from publishers.ayrshare import publish_article as publish_to_facebook
 
 
@@ -72,26 +73,75 @@ def process_platform(platform: str, logger: logging.Logger) -> bool:
         logger.warning(f"No eligible articles found for {platform}")
         return False
 
-    logger.info(f"Selected article: {article['title']} (ID: {article['id']})")
-
-    # Generate accroche
-    accroche = generate_accroche(
-        article_id=article['id'],
-        title=article['title'],
-        excerpt=article['excerpt'],
-        platform=platform
-    )
-    logger.info(f"Generated accroche: {accroche}")
+    logger.info(f"Selected article: {article['title']} (ID: {article['id']}, Score: {article['score']}, Words: {article['word_count']})")
 
     # Publish using appropriate publisher
     if platform == 'twitter':
-        success = publish_to_twitter(
-            article_id=article['id'],
-            article_url=article['url'],
-            accroche=accroche,
-            image_url=article.get('image_url')
+        # Use thread generator for Twitter
+        previous_hooks = get_previous_accroches(article['id'], 'twitter')
+
+        content = generate_twitter_content(
+            title=article['title'],
+            excerpt=article['excerpt'],
+            word_count=article['word_count'],
+            score=article['score'],
+            previous_hooks=previous_hooks,
+            force_format=None  # Auto mode
         )
+
+        logger.info(f"Format: {content['format']} ({content['posts_count']} tweet(s))")
+
+        if content['type'] == 'thread':
+            # Post as thread
+            result = post_thread(
+                tweets=content['tweets'],
+                article_url=article['url'],
+                image_url=article.get('image_url'),
+                dry_run=False
+            )
+            success = result['success']
+
+            # Record the repost
+            accroche = content['tweets'][0] if content['tweets'] else ''
+            add_repost(
+                article_id=article['id'],
+                platform='twitter',
+                accroche=accroche,
+                success=success,
+                error_message=result.get('error'),
+                format=content['format'],
+                posts_count=content['posts_count']
+            )
+        else:
+            # Post as simple tweet
+            tweet_text = f"{content['tweets'][0]}\n{article['url']}"
+            result = post_tweet(
+                text=tweet_text,
+                image_url=article.get('image_url'),
+                dry_run=False
+            )
+            success = result['success']
+
+            # Record the repost
+            add_repost(
+                article_id=article['id'],
+                platform='twitter',
+                accroche=content['tweets'][0],
+                success=success,
+                error_message=result.get('error'),
+                format='simple',
+                posts_count=1
+            )
     else:
+        # Generate accroche for Facebook
+        accroche = generate_accroche(
+            article_id=article['id'],
+            title=article['title'],
+            excerpt=article['excerpt'],
+            platform=platform
+        )
+        logger.info(f"Generated accroche: {accroche}")
+
         success = publish_to_facebook(
             article_id=article['id'],
             article_url=article['url'],

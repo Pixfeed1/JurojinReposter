@@ -6,6 +6,8 @@ Usage:
     python -m cli.post --platform facebook
     python -m cli.post --platform twitter --dry-run
     python -m cli.post --platform twitter --article-id 123
+    python -m cli.post --platform twitter --format thread
+    python -m cli.post --platform twitter --format simple
 """
 
 import argparse
@@ -17,10 +19,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import LOG_PATH
-from core.database import init_database, get_article_by_id
+from core.database import init_database, get_article_by_id, add_repost, get_previous_accroches
 from core.selector import select_best_article, get_article_eligibility
 from ai.groq_client import generate_accroche
-from publishers.twitter_direct import publish_to_twitter
+from ai.thread_generator import generate_twitter_content
+from publishers.twitter_direct import publish_to_twitter, post_thread, post_tweet
 from publishers.ayrshare import publish_article as publish_to_facebook
 
 
@@ -47,6 +50,9 @@ def main():
                         help='Simulate posting without actually posting')
     parser.add_argument('--article-id', type=int,
                         help='Force posting a specific article by ID')
+    parser.add_argument('--format', choices=['simple', 'thread', 'auto'],
+                        default='auto',
+                        help='Twitter format: simple (1 tweet), thread (multi-tweet), or auto (based on score/word count)')
     args = parser.parse_args()
 
     setup_logging()
@@ -81,33 +87,85 @@ def main():
             sys.exit(0)
 
     logger.info(f"Selected article: {article['title']}")
-    logger.info(f"  ID: {article['id']}, Score: {article['score']}")
+    logger.info(f"  ID: {article['id']}, Score: {article['score']}, Words: {article['word_count']}")
     logger.info(f"  URL: {article['url']}")
-
-    # Generate accroche
-    logger.info("Generating accroche...")
-    accroche = generate_accroche(
-        article_id=article['id'],
-        title=article['title'],
-        excerpt=article['excerpt'],
-        platform=args.platform
-    )
-    logger.info(f"Accroche: {accroche}")
 
     # Publish
     logger.info(f"Publishing to {args.platform}...")
 
     if args.platform == 'twitter':
-        # Use direct Twitter API
-        success = publish_to_twitter(
-            article_id=article['id'],
-            article_url=article['url'],
-            accroche=accroche,
-            image_url=article.get('image_url'),
-            dry_run=args.dry_run
+        # Use thread generator for Twitter
+        force_format = None if args.format == 'auto' else args.format
+        previous_hooks = get_previous_accroches(article['id'], 'twitter')
+
+        content = generate_twitter_content(
+            title=article['title'],
+            excerpt=article['excerpt'],
+            word_count=article['word_count'],
+            score=article['score'],
+            previous_hooks=previous_hooks,
+            force_format=force_format
         )
+
+        logger.info(f"Format: {content['format']} ({content['posts_count']} tweet(s))")
+        for i, tweet in enumerate(content['tweets']):
+            logger.info(f"  Tweet {i+1}: {tweet[:80]}{'...' if len(tweet) > 80 else ''}")
+
+        if content['type'] == 'thread':
+            # Post as thread
+            result = post_thread(
+                tweets=content['tweets'],
+                article_url=article['url'],
+                image_url=article.get('image_url'),
+                dry_run=args.dry_run
+            )
+            success = result['success']
+
+            # Record the repost (skip for dry run)
+            if not args.dry_run:
+                # Store first tweet as accroche for history
+                accroche = content['tweets'][0] if content['tweets'] else ''
+                add_repost(
+                    article_id=article['id'],
+                    platform='twitter',
+                    accroche=accroche,
+                    success=success,
+                    error_message=result.get('error'),
+                    format=content['format'],
+                    posts_count=content['posts_count']
+                )
+        else:
+            # Post as simple tweet
+            tweet_text = f"{content['tweets'][0]}\n{article['url']}"
+            result = post_tweet(
+                text=tweet_text,
+                image_url=article.get('image_url'),
+                dry_run=args.dry_run
+            )
+            success = result['success']
+
+            # Record the repost (skip for dry run)
+            if not args.dry_run:
+                add_repost(
+                    article_id=article['id'],
+                    platform='twitter',
+                    accroche=content['tweets'][0],
+                    success=success,
+                    error_message=result.get('error'),
+                    format='simple',
+                    posts_count=1
+                )
     else:
-        # Use Ayrshare for Facebook
+        # Use Ayrshare for Facebook (generate simple accroche)
+        logger.info("Generating accroche...")
+        accroche = generate_accroche(
+            article_id=article['id'],
+            title=article['title'],
+            excerpt=article['excerpt'],
+            platform=args.platform
+        )
+        logger.info(f"Accroche: {accroche}")
+
         success = publish_to_facebook(
             article_id=article['id'],
             article_url=article['url'],

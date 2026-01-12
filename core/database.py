@@ -60,9 +60,21 @@ def init_database() -> None:
             posted_at DATETIME,
             success BOOLEAN,
             error_message TEXT,
+            format TEXT DEFAULT 'simple',
+            posts_count INTEGER DEFAULT 1,
             FOREIGN KEY (article_id) REFERENCES articles(id)
         )
     """)
+
+    # Add format and posts_count columns if they don't exist (for migration)
+    try:
+        cursor.execute("ALTER TABLE reposts ADD COLUMN format TEXT DEFAULT 'simple'")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    try:
+        cursor.execute("ALTER TABLE reposts ADD COLUMN posts_count INTEGER DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Post queue table
     cursor.execute("""
@@ -203,14 +215,15 @@ def set_priority_boost(article_id: int, boost: int) -> None:
 
 
 def add_repost(article_id: int, platform: str, accroche: str,
-               success: bool, error_message: Optional[str] = None) -> int:
+               success: bool, error_message: Optional[str] = None,
+               format: str = 'simple', posts_count: int = 1) -> int:
     """Add a repost record. Returns the repost ID."""
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO reposts (article_id, platform, accroche, posted_at, success, error_message)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (article_id, platform, accroche, datetime.now().isoformat(), success, error_message))
+        INSERT INTO reposts (article_id, platform, accroche, posted_at, success, error_message, format, posts_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (article_id, platform, accroche, datetime.now().isoformat(), success, error_message, format, posts_count))
     conn.commit()
     repost_id = cursor.lastrowid
     conn.close()
@@ -407,6 +420,22 @@ def get_stats() -> dict:
         GROUP BY platform
     """)
     stats['reposts_by_platform'] = {row['platform']: row['count'] for row in cursor.fetchall()}
+
+    # Reposts by format (threads vs simple)
+    cursor.execute("""
+        SELECT format, COUNT(*) as count, SUM(posts_count) as total_posts
+        FROM reposts WHERE success = 1
+        GROUP BY format
+    """)
+    stats['reposts_by_format'] = {
+        row['format'] or 'simple': {'count': row['count'], 'total_posts': row['total_posts'] or row['count']}
+        for row in cursor.fetchall()
+    }
+
+    # Total tweets posted (including thread tweets)
+    cursor.execute("SELECT SUM(posts_count) as total FROM reposts WHERE success = 1 AND platform = 'twitter'")
+    result = cursor.fetchone()
+    stats['total_tweets'] = result['total'] if result['total'] else 0
 
     # Pending in queue
     cursor.execute("SELECT COUNT(*) as count FROM post_queue WHERE status = 'pending'")
