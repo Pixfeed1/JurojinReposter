@@ -17,6 +17,15 @@ load_dotenv(BASE_DIR / ".env")
 WORDPRESS_URL = "https://jurojin.net/wp-json/wp/v2"
 WORDPRESS_PER_PAGE = 100
 
+# Custom Post Types to synchronize
+WORDPRESS_POST_TYPES = [
+    {"name": "Articles", "endpoint": "posts", "evergreen": True},
+    {"name": "Guides d'achat", "endpoint": "guide", "evergreen": True},
+    {"name": "Tests Jeux", "endpoint": "jeu", "evergreen": True},
+    {"name": "Glossaire 3D", "endpoint": "glossaire", "evergreen": True},
+    {"name": "Animes", "endpoint": "anime", "evergreen": False},
+]
+
 # API Keys (set via environment variables or directly here)
 AYRSHARE_API_KEY = os.getenv("AYRSHARE_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")

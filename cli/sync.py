@@ -14,7 +14,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config.settings import LOG_PATH
+from collections import Counter
+from config.settings import LOG_PATH, WORDPRESS_POST_TYPES
 from core.database import init_database, upsert_article
 from core.scoring import recalculate_all_scores
 from sources.wordpress import fetch_articles
@@ -64,6 +65,7 @@ def main():
     # Insert/update articles
     inserted = 0
     updated = 0
+    by_type = Counter()
 
     for article in articles:
         try:
@@ -71,6 +73,7 @@ def main():
             existing = get_article_by_wp_id(article['wp_id'])
 
             upsert_article(article)
+            by_type[article.get('post_type', 'posts')] += 1
 
             if existing:
                 updated += 1
@@ -80,7 +83,14 @@ def main():
         except Exception as e:
             logger.error(f"Error saving article {article.get('wp_id')}: {e}")
 
+    # Build post type name mapping
+    post_type_names = {pt['endpoint']: pt['name'] for pt in WORDPRESS_POST_TYPES}
+
     logger.info(f"Inserted: {inserted}, Updated: {updated}")
+    logger.info("By type:")
+    for post_type, count in by_type.items():
+        type_name = post_type_names.get(post_type, post_type)
+        logger.info(f"  {type_name}: {count}")
 
     # Recalculate scores
     logger.info("Recalculating scores...")

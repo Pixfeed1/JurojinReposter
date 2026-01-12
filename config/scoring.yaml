@@ -6,6 +6,18 @@ evergreen_categories:
   - after-effects
   - vfx
 
+# Post types toujours evergreen (definis dans settings.py)
+# - posts: selon categorie
+# - guide: toujours evergreen
+# - jeu: toujours evergreen
+# - glossaire: toujours evergreen
+# - anime: pas evergreen par defaut
+
+evergreen_post_types:
+  - guide
+  - jeu
+  - glossaire
+
 excluded_categories:
   - actualites
   - news

@@ -32,6 +32,7 @@ def init_database() -> None:
             title TEXT,
             excerpt TEXT,
             category TEXT,
+            post_type TEXT DEFAULT 'posts',
             image_url TEXT,
             word_count INTEGER,
             published_at DATETIME,
@@ -42,6 +43,12 @@ def init_database() -> None:
             synced_at DATETIME
         )
     """)
+
+    # Add post_type column if it doesn't exist (for migration)
+    try:
+        cursor.execute("ALTER TABLE articles ADD COLUMN post_type TEXT DEFAULT 'posts'")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # Reposts history table
     cursor.execute("""
@@ -97,14 +104,15 @@ def upsert_article(article_data: dict) -> int:
 
     cursor.execute("""
         INSERT INTO articles (
-            wp_id, url, title, excerpt, category, image_url,
+            wp_id, url, title, excerpt, category, post_type, image_url,
             word_count, published_at, is_evergreen, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(wp_id) DO UPDATE SET
             url = excluded.url,
             title = excluded.title,
             excerpt = excluded.excerpt,
             category = excluded.category,
+            post_type = excluded.post_type,
             image_url = excluded.image_url,
             word_count = excluded.word_count,
             published_at = excluded.published_at,
@@ -116,6 +124,7 @@ def upsert_article(article_data: dict) -> int:
         article_data['title'],
         article_data['excerpt'],
         article_data['category'],
+        article_data.get('post_type', 'posts'),
         article_data.get('image_url'),
         article_data['word_count'],
         article_data['published_at'],
@@ -378,6 +387,14 @@ def get_stats() -> dict:
     # Evergreen articles
     cursor.execute("SELECT COUNT(*) as count FROM articles WHERE is_evergreen = 1")
     stats['evergreen_articles'] = cursor.fetchone()['count']
+
+    # Articles by post type
+    cursor.execute("""
+        SELECT post_type, COUNT(*) as count
+        FROM articles
+        GROUP BY post_type
+    """)
+    stats['articles_by_type'] = {row['post_type'] or 'posts': row['count'] for row in cursor.fetchall()}
 
     # Total reposts
     cursor.execute("SELECT COUNT(*) as count FROM reposts WHERE success = 1")

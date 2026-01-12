@@ -50,12 +50,24 @@ def setup_logging():
 
 def show_stats():
     """Display database statistics."""
+    from config.settings import WORDPRESS_POST_TYPES
+
     stats = get_stats()
+
+    # Build post type name mapping
+    post_type_names = {pt['endpoint']: pt['name'] for pt in WORDPRESS_POST_TYPES}
 
     print("\n=== Jurojin Reposter Statistics ===\n")
     print(f"Total articles:     {stats['total_articles']}")
     print(f"Active articles:    {stats['active_articles']}")
     print(f"Evergreen articles: {stats['evergreen_articles']}")
+
+    if stats.get('articles_by_type'):
+        print("\nArticles by type:")
+        for post_type, count in stats['articles_by_type'].items():
+            type_name = post_type_names.get(post_type, post_type)
+            print(f"  {type_name}: {count}")
+
     print(f"\nTotal reposts:      {stats['total_reposts']}")
 
     if stats['reposts_by_platform']:
@@ -119,7 +131,10 @@ def show_history(limit: int):
 
 def show_top_articles(platform: str, limit: int):
     """Display top eligible articles for a platform."""
+    from config.settings import WORDPRESS_POST_TYPES
+
     articles = get_top_articles(platform, limit)
+    post_type_names = {pt['endpoint']: pt['name'] for pt in WORDPRESS_POST_TYPES}
 
     print(f"\n=== Top {limit} Articles for {platform} ===\n")
 
@@ -134,8 +149,11 @@ def show_top_articles(platform: str, limit: int):
         else:
             days_info = " (never reposted)"
 
-        print(f"{i}. [{article['score']}] {article['title'][:60]}...")
-        print(f"   ID: {article['id']}, Category: {article['category']}{days_info}")
+        post_type = article.get('post_type', 'posts')
+        type_name = post_type_names.get(post_type, post_type)
+
+        print(f"{i}. [{article['score']}] {article['title'][:55]}...")
+        print(f"   ID: {article['id']}, Type: {type_name}, Cat: {article['category']}{days_info}")
         print()
 
 

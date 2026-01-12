@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 from bs4 import BeautifulSoup
 
-from config.settings import WORDPRESS_URL, WORDPRESS_PER_PAGE
+from config.settings import WORDPRESS_URL, WORDPRESS_PER_PAGE, WORDPRESS_POST_TYPES
 from core.scoring import is_evergreen_category
 
 logger = logging.getLogger(__name__)
@@ -106,31 +106,30 @@ def fetch_media(media_id: int) -> Optional[str]:
         return None
 
 
-def fetch_articles(per_page: int = WORDPRESS_PER_PAGE,
-                   full_sync: bool = False) -> list:
+def fetch_posts_by_type(endpoint: str, post_type_name: str, post_type_evergreen: bool,
+                        categories: dict, per_page: int, max_pages: int) -> list:
     """
-    Fetch articles from WordPress API.
+    Fetch posts of a specific type from WordPress API.
 
     Args:
-        per_page: Number of articles per page
-        full_sync: If True, fetch all articles. If False, fetch only recent ones.
+        endpoint: The REST API endpoint (e.g., 'posts', 'guide', 'jeu')
+        post_type_name: Human-readable name for logging
+        post_type_evergreen: Whether this post type is evergreen by default
+        categories: Dict mapping category IDs to slugs
+        per_page: Number of posts per page
+        max_pages: Maximum pages to fetch
 
     Returns:
-        List of article dictionaries ready for database insertion
+        List of article dictionaries
     """
-    # First, fetch all categories
-    categories = fetch_categories()
-    logger.info(f"Fetched {len(categories)} categories")
-
     articles = []
     page = 1
-    max_pages = 100 if full_sync else 5  # Limit pages for incremental sync
 
     while page <= max_pages:
         try:
-            logger.info(f"Fetching articles page {page}...")
+            logger.info(f"Fetching {post_type_name} page {page}...")
             response = requests.get(
-                f"{WORDPRESS_URL}/posts",
+                f"{WORDPRESS_URL}/{endpoint}",
                 params={
                     'per_page': per_page,
                     'page': page,
@@ -142,7 +141,7 @@ def fetch_articles(per_page: int = WORDPRESS_PER_PAGE,
 
             if response.status_code == 400:
                 # No more pages
-                logger.info(f"Reached end of articles at page {page}")
+                logger.info(f"Reached end of {post_type_name} at page {page}")
                 break
 
             response.raise_for_status()
@@ -173,21 +172,25 @@ def fetch_articles(per_page: int = WORDPRESS_PER_PAGE,
                 if featured_media:
                     image_url = fetch_media(featured_media)
 
+                # Determine if evergreen: post type default OR category-based
+                is_evergreen = post_type_evergreen or is_evergreen_category(primary_category)
+
                 article = {
                     'wp_id': post['id'],
                     'url': post['link'],
                     'title': title,
                     'excerpt': excerpt[:500] if excerpt else '',  # Limit excerpt length
                     'category': primary_category,
+                    'post_type': endpoint,
                     'image_url': image_url,
                     'word_count': word_count,
                     'published_at': post['date'],
-                    'is_evergreen': is_evergreen_category(primary_category)
+                    'is_evergreen': is_evergreen
                 }
 
                 articles.append(article)
 
-            logger.info(f"Fetched {len(data)} articles from page {page}")
+            logger.info(f"Fetched {len(data)} {post_type_name} from page {page}")
 
             if len(data) < per_page:
                 break
@@ -195,28 +198,77 @@ def fetch_articles(per_page: int = WORDPRESS_PER_PAGE,
             page += 1
 
         except requests.RequestException as e:
-            logger.error(f"Error fetching articles page {page}: {e}")
+            logger.error(f"Error fetching {post_type_name} page {page}: {e}")
             break
 
-    logger.info(f"Total articles fetched: {len(articles)}")
     return articles
 
 
-def fetch_single_article(post_id: int) -> Optional[dict]:
+def fetch_articles(per_page: int = WORDPRESS_PER_PAGE,
+                   full_sync: bool = False) -> list:
+    """
+    Fetch articles from all configured post types in WordPress API.
+
+    Args:
+        per_page: Number of articles per page
+        full_sync: If True, fetch all articles. If False, fetch only recent ones.
+
+    Returns:
+        List of article dictionaries ready for database insertion
+    """
+    # First, fetch all categories
+    categories = fetch_categories()
+    logger.info(f"Fetched {len(categories)} categories")
+
+    all_articles = []
+    max_pages = 100 if full_sync else 5  # Limit pages for incremental sync
+
+    # Loop through all configured post types
+    for post_type in WORDPRESS_POST_TYPES:
+        endpoint = post_type['endpoint']
+        name = post_type['name']
+        evergreen = post_type.get('evergreen', False)
+
+        logger.info(f"--- Syncing {name} ({endpoint}) ---")
+
+        articles = fetch_posts_by_type(
+            endpoint=endpoint,
+            post_type_name=name,
+            post_type_evergreen=evergreen,
+            categories=categories,
+            per_page=per_page,
+            max_pages=max_pages
+        )
+
+        logger.info(f"Fetched {len(articles)} {name}")
+        all_articles.extend(articles)
+
+    logger.info(f"Total content fetched: {len(all_articles)}")
+    return all_articles
+
+
+def fetch_single_article(post_id: int, post_type: str = 'posts') -> Optional[dict]:
     """
     Fetch a single article by its WordPress ID.
 
     Args:
         post_id: The WordPress post ID
+        post_type: The post type endpoint (default: 'posts')
 
     Returns:
         Article dictionary or None if not found
     """
     categories = fetch_categories()
 
+    # Get post type config for evergreen default
+    post_type_config = next(
+        (pt for pt in WORDPRESS_POST_TYPES if pt['endpoint'] == post_type),
+        {'evergreen': False}
+    )
+
     try:
         response = requests.get(
-            f"{WORDPRESS_URL}/posts/{post_id}",
+            f"{WORDPRESS_URL}/{post_type}/{post_id}",
             timeout=30
         )
         response.raise_for_status()
@@ -243,18 +295,22 @@ def fetch_single_article(post_id: int) -> Optional[dict]:
         if featured_media:
             image_url = fetch_media(featured_media)
 
+        # Determine if evergreen
+        is_evergreen = post_type_config.get('evergreen', False) or is_evergreen_category(primary_category)
+
         return {
             'wp_id': post['id'],
             'url': post['link'],
             'title': title,
             'excerpt': excerpt[:500] if excerpt else '',
             'category': primary_category,
+            'post_type': post_type,
             'image_url': image_url,
             'word_count': word_count,
             'published_at': post['date'],
-            'is_evergreen': is_evergreen_category(primary_category)
+            'is_evergreen': is_evergreen
         }
 
     except requests.RequestException as e:
-        logger.error(f"Error fetching article {post_id}: {e}")
+        logger.error(f"Error fetching {post_type} {post_id}: {e}")
         return None

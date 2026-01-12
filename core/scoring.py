@@ -23,7 +23,7 @@ def calculate_score(article: dict, config: dict = None) -> int:
     Calculate the score for an article based on various criteria.
 
     Scoring rules:
-    - Evergreen category: +50
+    - Evergreen (category or post type): +50
     - Article older than 6 months: +30
     - Never reposted: +40
     - Not reposted in 90 days: +30
@@ -38,6 +38,7 @@ def calculate_score(article: dict, config: dict = None) -> int:
 
     weights = config['weights']
     evergreen_categories = config['evergreen_categories']
+    evergreen_post_types = config.get('evergreen_post_types', [])
     excluded_categories = config['excluded_categories']
 
     # Check if article is excluded
@@ -51,8 +52,13 @@ def calculate_score(article: dict, config: dict = None) -> int:
 
     score = 0
 
-    # Evergreen category bonus
-    if category in [c.lower() for c in evergreen_categories]:
+    # Evergreen bonus (from category, post type, or is_evergreen flag)
+    post_type = article.get('post_type', 'posts')
+    is_evergreen_cat = category in [c.lower() for c in evergreen_categories]
+    is_evergreen_type = post_type in [pt.lower() for pt in evergreen_post_types]
+    is_evergreen_flag = article.get('is_evergreen', False)
+
+    if is_evergreen_cat or is_evergreen_type or is_evergreen_flag:
         score += weights['evergreen_category']
 
     # Parse published date
@@ -138,3 +144,12 @@ def is_excluded_category(category: str, config: dict = None) -> bool:
         config = load_scoring_config()
 
     return category.lower() in [c.lower() for c in config['excluded_categories']]
+
+
+def is_evergreen_post_type(post_type: str, config: dict = None) -> bool:
+    """Check if a post type is considered evergreen."""
+    if config is None:
+        config = load_scoring_config()
+
+    evergreen_types = config.get('evergreen_post_types', [])
+    return post_type.lower() in [pt.lower() for pt in evergreen_types]
