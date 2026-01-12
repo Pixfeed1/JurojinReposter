@@ -1,0 +1,180 @@
+"""
+CLI command for the scheduler (called by CRON).
+
+Usage:
+    python -m cli.scheduler
+"""
+
+import logging
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from config.settings import LOG_PATH
+from core.database import init_database, update_queue_status
+from core.scheduler import (
+    is_scheduled_time,
+    should_post_today,
+    get_items_to_retry,
+    load_scheduling_config,
+    get_retry_config
+)
+from core.selector import select_best_article
+from ai.groq_client import generate_accroche
+from publishers.ayrshare import publish_article
+
+
+def setup_logging():
+    """Configure logging."""
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(LOG_PATH),
+            logging.StreamHandler()
+        ]
+    )
+
+
+def process_platform(platform: str, logger: logging.Logger) -> bool:
+    """
+    Process posting for a platform if it's the scheduled time.
+
+    Returns True if a post was made, False otherwise.
+    """
+    config = load_scheduling_config()
+    platform_config = config.get(platform, {})
+
+    if not platform_config.get('enabled', False):
+        logger.debug(f"{platform} is disabled")
+        return False
+
+    # Check if it's a scheduled time
+    if not is_scheduled_time(platform):
+        logger.debug(f"Not a scheduled time for {platform}")
+        return False
+
+    # Check if we should post today (for platforms with post_every_n_days)
+    if not should_post_today(platform):
+        logger.info(f"Skipping {platform} - not scheduled for today")
+        return False
+
+    logger.info(f"Processing scheduled post for {platform}")
+
+    # Select best article
+    article = select_best_article(platform)
+    if not article:
+        logger.warning(f"No eligible articles found for {platform}")
+        return False
+
+    logger.info(f"Selected article: {article['title']} (ID: {article['id']})")
+
+    # Generate accroche
+    accroche = generate_accroche(
+        article_id=article['id'],
+        title=article['title'],
+        excerpt=article['excerpt'],
+        platform=platform
+    )
+    logger.info(f"Generated accroche: {accroche}")
+
+    # Publish
+    success = publish_article(
+        article_id=article['id'],
+        article_url=article['url'],
+        accroche=accroche,
+        platform=platform,
+        image_url=article.get('image_url')
+    )
+
+    if success:
+        logger.info(f"Successfully posted to {platform}")
+    else:
+        logger.error(f"Failed to post to {platform}")
+
+    return success
+
+
+def process_retries(logger: logging.Logger) -> int:
+    """
+    Process failed items in the queue that are ready for retry.
+
+    Returns the number of successful retries.
+    """
+    retry_config = get_retry_config()
+    items_to_retry = get_items_to_retry()
+
+    if not items_to_retry:
+        logger.debug("No items to retry")
+        return 0
+
+    logger.info(f"Processing {len(items_to_retry)} items for retry")
+
+    success_count = 0
+    for item in items_to_retry:
+        logger.info(f"Retrying: {item['title']} on {item['platform']} (attempt {item['attempts'] + 1})")
+
+        success = publish_article(
+            article_id=item['article_id'],
+            article_url=item['url'],
+            accroche=item['accroche'],
+            platform=item['platform'],
+            image_url=item.get('image_url')
+        )
+
+        if success:
+            update_queue_status(item['id'], 'completed')
+            success_count += 1
+            logger.info(f"Retry successful for article {item['article_id']}")
+        else:
+            max_attempts = retry_config.get('max_attempts', 3)
+            if item['attempts'] + 1 >= max_attempts:
+                update_queue_status(item['id'], 'permanently_failed',
+                                    'Max retry attempts reached')
+                logger.error(f"Permanently failed: article {item['article_id']}")
+            else:
+                update_queue_status(item['id'], 'failed')
+                logger.warning(f"Retry failed for article {item['article_id']}")
+
+    return success_count
+
+
+def main():
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    logger.info("=" * 50)
+    logger.info("Scheduler running...")
+
+    # Initialize database
+    init_database()
+
+    # Process each platform
+    platforms = ['twitter', 'facebook']
+    posts_made = 0
+
+    for platform in platforms:
+        try:
+            if process_platform(platform, logger):
+                posts_made += 1
+        except Exception as e:
+            logger.error(f"Error processing {platform}: {e}")
+
+    # Process retries
+    try:
+        retries_successful = process_retries(logger)
+        if retries_successful:
+            logger.info(f"Successfully retried {retries_successful} posts")
+    except Exception as e:
+        logger.error(f"Error processing retries: {e}")
+
+    logger.info(f"Scheduler completed. Posts made: {posts_made}")
+    logger.info("=" * 50)
+
+
+if __name__ == '__main__':
+    main()

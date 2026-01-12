@@ -1,0 +1,14 @@
+# Jurojin Social Reposter - Crontab Configuration
+#
+# To install these cron jobs, run:
+#   crontab -e
+# Then paste the lines below (updating the path to your installation)
+
+# Sync WordPress articles every Sunday at 3:00 AM
+0 3 * * 0 cd /path/to/jurojin-reposter && /path/to/python -m cli.sync >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+
+# Run scheduler every hour (checks if it's time to post)
+0 * * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.scheduler >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+
+# Optional: Full sync on the first of each month
+0 4 1 * * cd /path/to/jurojin-reposter && /path/to/python -m cli.sync --full >> /path/to/jurojin-reposter/logs/cron.log 2>&1

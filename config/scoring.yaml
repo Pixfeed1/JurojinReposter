@@ -1,0 +1,24 @@
+evergreen_categories:
+  - blender
+  - tutoriels
+  - logiciels-3d
+  - cinema-4d
+  - after-effects
+  - vfx
+
+excluded_categories:
+  - actualites
+  - news
+  - evenements
+
+weights:
+  evergreen_category: 50
+  article_older_than_6_months: 30
+  never_reposted: 40
+  not_reposted_90_days: 30
+  word_count_over_1000: 20
+  recent_article_penalty: -30
+
+min_repost_interval:
+  twitter: 90
+  facebook: 90

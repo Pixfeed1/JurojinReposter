@@ -1,0 +1,14 @@
+twitter:
+  enabled: true
+  times: ["10:00", "14:00"]
+  timezone: "Europe/Paris"
+
+facebook:
+  enabled: true
+  times: ["11:00"]
+  post_every_n_days: 2
+  timezone: "Europe/Paris"
+
+retry:
+  max_attempts: 3
+  delay_minutes: 60
