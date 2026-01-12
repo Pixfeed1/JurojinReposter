@@ -1,7 +1,16 @@
 twitter:
   enabled: true
+  # 3 posts par jour aux heures de forte audience
   times: ["09:00", "12:30", "18:00"]
   timezone: "Europe/Paris"
+
+  # Limite mensuelle pour rester sous 100 tweets (forfait gratuit)
+  # 3 posts/jour = 90/mois, mais threads comptent multiple
+  # Avec 2 threads/semaine (3 tweets chacun) = ~100 tweets/mois
+  monthly_limit: 95
+
+  # Jours préférés pour les threads (meilleur engagement)
+  thread_days: ["tuesday", "thursday"]
 
 facebook:
   enabled: false
