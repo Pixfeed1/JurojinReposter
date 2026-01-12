@@ -28,12 +28,23 @@ pip install -r requirements.txt
 
 ### 4. Configurer les API
 
-Editez `config/settings.py` ou definissez les variables d'environnement :
+Copiez le fichier `.env.example` vers `.env` et remplissez vos cles API :
 
 ```bash
-export AYRSHARE_API_KEY="votre-cle-ayrshare"
-export GROQ_API_KEY="votre-cle-groq"
+cp .env.example .env
 ```
+
+Editez le fichier `.env` :
+
+```bash
+# Cle API Ayrshare (https://www.ayrshare.com/)
+AYRSHARE_API_KEY=votre-cle-ayrshare
+
+# Cle API Groq (https://console.groq.com/)
+GROQ_API_KEY=votre-cle-groq
+```
+
+> **Important** : Ne commitez JAMAIS le fichier `.env` ! Il est deja dans `.gitignore`.
 
 ## Utilisation
 
@@ -149,8 +160,9 @@ Chaque article recoit un score base sur :
 
 ```
 jurojin-reposter/
+├── .env.example           # Template pour les variables d'environnement
 ├── config/
-│   ├── settings.py        # Cles API, URLs
+│   ├── settings.py        # Configuration (charge .env)
 │   ├── scoring.yaml       # Categories evergreen, poids
 │   └── scheduling.yaml    # Horaires publication
 ├── core/
