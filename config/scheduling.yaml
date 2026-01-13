@@ -1,7 +1,7 @@
 twitter:
   enabled: true
   # 3 posts par jour aux heures de forte audience
-  times: ["09:00", "12:30", "18:00"]
+  times: ["09:00", "13:00", "18:00"]
   timezone: "Europe/Paris"
 
   # Limite mensuelle pour rester sous 100 tweets (forfait gratuit)
