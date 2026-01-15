@@ -15,6 +15,7 @@ from atproto import Client
 
 from config.settings import BASE_DIR, DATABASE_PATH
 from core.database import get_connection, init_database
+from core.bot_detector import BotDetector
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class BlueskyFollower:
     def __init__(self):
         self.config = self._load_config()
         self.client = None
+        self.bot_detector = BotDetector()
 
     def _load_config(self) -> dict:
         """Load follow strategy configuration."""
@@ -89,6 +91,18 @@ class BlueskyFollower:
     def _passes_filters(self, profile) -> bool:
         """Check if a profile passes all filters."""
         filters = self.config['filters']
+
+        # Bot detection check
+        if filters.get('exclude_bots', True):
+            bot_config = filters.get('bot_detection', {})
+            deep_check = bot_config.get('deep_check_enabled', False)
+            min_confidence = bot_config.get('min_confidence_to_skip', 50)
+
+            bot_check = self.bot_detector.is_bot(profile, deep_check=deep_check)
+            if bot_check["is_bot"] and bot_check["confidence"] >= min_confidence:
+                handle = getattr(profile, 'handle', 'unknown')
+                logger.info(f"Skipping bot: @{handle} (confidence: {bot_check['confidence']}%, reasons: {bot_check['reasons']})")
+                return False
 
         followers = getattr(profile, 'followers_count', 0) or 0
         following = getattr(profile, 'following_count', 0) or 0

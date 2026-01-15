@@ -7,10 +7,12 @@ Usage:
     python -m cli.follow check            # Check for follow-backs
     python -m cli.follow unfollow         # Unfollow non-followers
     python -m cli.follow stats            # Show statistics
+    python -m cli.follow botcheck --handle @user.bsky.social  # Check if account is bot
 """
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -19,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import LOG_PATH
 from core.bluesky_follower import BlueskyFollower
+from core.bot_detector import BotDetector
 
 
 def setup_logging():
@@ -37,10 +40,12 @@ def setup_logging():
 
 def main():
     parser = argparse.ArgumentParser(description='Bluesky Follow Manager')
-    parser.add_argument('action', choices=['run', 'check', 'unfollow', 'stats'],
+    parser.add_argument('action', choices=['run', 'check', 'unfollow', 'stats', 'botcheck'],
                         help='Action to perform')
     parser.add_argument('--dry-run', action='store_true',
                         help='Simulate without actually following/unfollowing')
+    parser.add_argument('--handle', type=str,
+                        help='Handle to check for botcheck action (e.g., @user.bsky.social)')
 
     args = parser.parse_args()
 
@@ -77,6 +82,33 @@ def main():
             print("\nBy segment:")
             for seg, count in stats.get('by_segment', {}).items():
                 print(f"  {seg}: {count}")
+
+        elif args.action == 'botcheck':
+            if not args.handle:
+                print("Usage: python3 -m cli.follow botcheck --handle @user.bsky.social")
+                sys.exit(1)
+
+            handle = args.handle.lstrip('@')
+            logger.info(f"Checking if @{handle} is a bot...")
+
+            from atproto import Client
+
+            client = Client()
+            client.login(
+                os.getenv("BLUESKY_HANDLE"),
+                os.getenv("BLUESKY_APP_PASSWORD")
+            )
+
+            profile = client.app.bsky.actor.get_profile(params={"actor": handle})
+
+            detector = BotDetector()
+            result = detector.is_bot(profile, deep_check=True)
+
+            print(f"\n=== Bot Check: @{handle} ===")
+            print(f"Is Bot: {'YES' if result['is_bot'] else 'NO'}")
+            print(f"Confidence: {result['confidence']}%")
+            print(f"Reasons: {', '.join(result['reasons']) if result['reasons'] else 'None'}")
+            print(f"Source: {result['source']}")
 
     except Exception as e:
         logger.error(f"Error: {e}")

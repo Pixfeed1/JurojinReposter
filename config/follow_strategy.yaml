@@ -38,6 +38,15 @@ bluesky_follow:
     last_post_max_days: 14          # Actif dans les 14 derniers jours
     exclude_following_back: true    # Ne pas follow quelqu'un qu'on follow deja
 
+    # Options anti-bot
+    exclude_bots: true              # Activer la detection de bots
+    bot_detection:
+      min_confidence_to_skip: 50    # Skip si confidence >= 50%
+      deep_check_enabled: false     # Analyse des posts (plus lent)
+      skip_no_avatar: true          # Skip comptes sans avatar
+      skip_no_bio: true             # Skip comptes sans bio
+      max_following_ratio_strict: 10 # Ratio au-dela = bot probable
+
   # Keywords pour rechercher des cibles
   search_hashtags:
     - "Blender3D"
