@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 class BotDetector:
     """
     Detects bot accounts before following them.
-    Combines: bskycheck.com API + local heuristics.
+    Uses local heuristics by default (fast). External API disabled.
     """
 
     def __init__(self):
         self.client = None
-        self.bskycheck_enabled = True
+        self.bskycheck_enabled = False  # Disabled by default (too slow/unstable)
 
     def _connect_bluesky(self) -> Client:
         """Connect to Bluesky API."""
@@ -40,7 +40,8 @@ class BotDetector:
 
     def check_bskycheck_api(self, handle: str) -> Optional[dict]:
         """
-        Check via bskycheck.com API if available.
+        Check via bskycheck.com API if enabled.
+        Disabled by default - too slow/unstable.
         Returns: {"is_bot": bool, "confidence": float, "source": "bskycheck"}
         """
         if not self.bskycheck_enabled:
@@ -48,7 +49,7 @@ class BotDetector:
 
         try:
             url = f"https://bskycheck.com/api/botcheck?handle={handle}"
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=2)  # Short timeout
 
             if response.status_code == 200:
                 data = response.json()
@@ -57,9 +58,9 @@ class BotDetector:
                     "confidence": data.get("confidence", 0),
                     "source": "bskycheck"
                 }
-        except Exception as e:
+        except:
+            # Silently disable on any error
             self.bskycheck_enabled = False
-            logger.debug(f"bskycheck API unavailable, using local heuristics: {e}")
 
         return None
 
@@ -195,10 +196,11 @@ class BotDetector:
     def is_bot(self, profile, deep_check: bool = False) -> dict:
         """
         Main method: check if an account is a bot.
+        Uses fast local heuristics by default.
 
         Args:
             profile: Bluesky profile object
-            deep_check: if True, also analyze posts (slower)
+            deep_check: if True, also analyze posts (slower, use sparingly)
 
         Returns:
             {
@@ -208,19 +210,12 @@ class BotDetector:
                 "source": str
             }
         """
-        handle = getattr(profile, 'handle', 'unknown')
-
-        # 1. Try bskycheck API first
-        external_check = self.check_bskycheck_api(handle)
-        if external_check and external_check.get("confidence", 0) > 70:
-            return external_check
-
-        # 2. Local profile analysis
+        # Fast local profile analysis (instant)
         profile_analysis = self.analyze_profile(profile)
         total_score = profile_analysis["score"]
         all_reasons = profile_analysis["reasons"]
 
-        # 3. Deep check if requested and score is ambiguous
+        # Deep check only if explicitly requested (slower - analyzes posts)
         if deep_check and 30 <= total_score <= 70:
             did = getattr(profile, 'did', None)
             if did:
@@ -228,14 +223,9 @@ class BotDetector:
                 total_score += behavior_analysis["score"]
                 all_reasons.extend(behavior_analysis["reasons"])
 
-        # Combine with external result if available
-        if external_check:
-            external_score = 50 if external_check.get("is_bot") else 0
-            total_score = (total_score + external_score) / 2
-
         return {
             "is_bot": total_score >= 50,
             "confidence": min(total_score, 100),
             "reasons": all_reasons,
-            "source": "combined" if external_check else "local_heuristics"
+            "source": "local_heuristics"
         }
