@@ -14,3 +14,16 @@
 
 # Optional: Full sync on the first of each month
 0 4 1 * * cd /path/to/jurojin-reposter && /path/to/python -m cli.sync --full >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+
+# === Bluesky Follow System ===
+# Follow: 4 times per day, ~7 follows each (28 total max)
+0 9 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow run >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+0 13 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow run >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+0 17 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow run >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+0 21 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow run >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+
+# Check follow-backs: once per day at 8:00
+0 8 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow check >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+
+# Unfollow non-followers: once per day at 7:00
+0 7 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow unfollow >> /path/to/jurojin-reposter/logs/cron.log 2>&1

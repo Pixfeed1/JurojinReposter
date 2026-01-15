@@ -105,6 +105,25 @@ def init_database() -> None:
         )
     """)
 
+    # Bluesky follows tracking table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bluesky_follows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            did TEXT UNIQUE NOT NULL,
+            handle TEXT NOT NULL,
+            display_name TEXT,
+            followers_count INTEGER,
+            following_count INTEGER,
+            segment TEXT,
+            followed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            follow_back BOOLEAN DEFAULT FALSE,
+            follow_back_checked_at TIMESTAMP,
+            unfollowed_at TIMESTAMP,
+            source_hashtag TEXT,
+            notes TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
