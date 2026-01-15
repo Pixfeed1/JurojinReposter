@@ -119,7 +119,7 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
     if previous_posts is None:
         previous_posts = []
 
-    hashtags = HASHTAGS_MAP.get(category, "#Jurojin #3D #Geek")
+    hashtags = HASHTAGS_MAP.get(category, "#JurojinNet #3D #Geek")
 
     # Determine if thread or simple based on word count
     is_thread = word_count >= 1500
