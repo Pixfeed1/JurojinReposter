@@ -63,42 +63,45 @@ class BlueskyFollower:
             )
 
             posts_count = len(response.posts) if response.posts else 0
-            seen_dids = set()
 
-            # First pass: count unique authors
-            for post in response.posts:
-                seen_dids.add(post.author.did)
-            unique_authors = len(seen_dids)
-
-            logger.info(f"Searching #{hashtag}: found {posts_count} posts, {unique_authors} unique authors")
-
-            # Reset for actual processing
-            seen_dids = set()
+            # Collect unique DIDs and handles from search results
+            unique_authors = {}  # did -> handle
             for post in response.posts:
                 author = post.author
+                if author.did not in unique_authors:
+                    unique_authors[author.did] = getattr(author, 'handle', 'unknown')
 
-                if author.did in seen_dids:
+            logger.info(f"Searching #{hashtag}: found {posts_count} posts, {len(unique_authors)} unique authors")
+
+            # Fetch full profile for each author (searchPosts doesn't return followers_count)
+            for did, handle in unique_authors.items():
+                try:
+                    # Get full profile with followers_count
+                    profile = client.app.bsky.actor.get_profile(params={"actor": did})
+                    followers = getattr(profile, 'followers_count', 0) or 0
+
+                    if self._passes_filters(profile, log_handle=handle):
+                        segment = self._determine_segment(profile)
+                        if segment:
+                            logger.info(f"  ✓ @{handle} passes filters (segment: {segment}, {followers} followers)")
+                            targets.append({
+                                "did": did,
+                                "handle": handle,
+                                "display_name": getattr(profile, 'display_name', None),
+                                "followers_count": followers,
+                                "following_count": getattr(profile, 'following_count', 0),
+                                "segment": segment,
+                                "source_hashtag": hashtag
+                            })
+                        else:
+                            logger.info(f"  Skipping @{handle}: no matching segment ({followers} followers)")
+
+                    # Small delay to avoid rate limiting
+                    time.sleep(0.5)
+
+                except Exception as e:
+                    logger.warning(f"  Error fetching profile @{handle}: {e}")
                     continue
-                seen_dids.add(author.did)
-
-                handle = getattr(author, 'handle', 'unknown')
-                followers = getattr(author, 'followers_count', 0) or 0
-
-                if self._passes_filters(author, log_handle=handle):
-                    segment = self._determine_segment(author)
-                    if segment:
-                        logger.info(f"  ✓ @{handle} passes filters (segment: {segment}, {followers} followers)")
-                        targets.append({
-                            "did": author.did,
-                            "handle": author.handle,
-                            "display_name": getattr(author, 'display_name', None),
-                            "followers_count": followers,
-                            "following_count": getattr(author, 'following_count', 0),
-                            "segment": segment,
-                            "source_hashtag": hashtag
-                        })
-                    else:
-                        logger.info(f"  Skipping @{handle}: no matching segment ({followers} followers)")
 
         except Exception as e:
             logger.error(f"Error searching hashtag {hashtag}: {e}")
