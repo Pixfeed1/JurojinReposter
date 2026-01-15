@@ -79,9 +79,22 @@ def main():
             print(f"Total following: {stats['total_following']}")
             print(f"Follow-backs: {stats['follow_backs']} ({stats['follow_back_rate']}%)")
             print(f"Today: {stats['today']}/{stats['daily_limit']}")
+
             print("\nBy segment:")
             for seg, count in stats.get('by_segment', {}).items():
                 print(f"  {seg}: {count}")
+
+            print("\nBy language:")
+            for lang, count in stats.get('by_language', {}).items():
+                lang_label = {'fr': 'French', 'en': 'English', 'es': 'Spanish', 'unknown': 'Unknown'}.get(lang, lang)
+                print(f"  {lang_label}: {count}")
+            print(f"  => French: {stats.get('french_percent', 0)}%")
+
+            if stats.get('today_by_language'):
+                print("\nToday by language:")
+                for lang, count in stats.get('today_by_language', {}).items():
+                    lang_label = {'fr': 'French', 'en': 'English', 'es': 'Spanish', 'unknown': 'Unknown'}.get(lang, lang)
+                    print(f"  {lang_label}: {count}")
 
         elif args.action == 'botcheck':
             if not args.handle:

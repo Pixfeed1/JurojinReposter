@@ -80,3 +80,47 @@ bluesky_follow:
     - "artiste 3d"
     - "3d artist"
     - "compositor"
+
+  # Ciblage linguistique
+  language_targeting:
+    enabled: true
+    french_minimum_percent: 30  # Au moins 30% de follows francophones
+    detect_by:
+      bio_keywords:
+        - "france"
+        - "français"
+        - "française"
+        - "french"
+        - "paris"
+        - "lyon"
+        - "marseille"
+        - "toulouse"
+        - "nantes"
+        - "québec"
+        - "montreal"
+        - "belge"
+        - "belgique"
+        - "suisse"
+        - "genève"
+      handle_patterns:
+        - ".fr"
+        - "french"
+        - "paris"
+        - "france"
+      # Mots français courants dans les posts
+      french_words:
+        - " je "
+        - " tu "
+        - " nous "
+        - " vous "
+        - " les "
+        - " une "
+        - " des "
+        - " dans "
+        - " pour "
+        - " avec "
+        - " sur "
+        - " mais "
+        - " donc "
+        - " très "
+        - " aussi "

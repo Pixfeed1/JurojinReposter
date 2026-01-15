@@ -83,7 +83,13 @@ class BlueskyFollower:
                     if self._passes_filters(profile, log_handle=handle):
                         segment = self._determine_segment(profile)
                         if segment:
-                            logger.info(f"  ✓ @{handle} passes filters (segment: {segment}, {followers} followers)")
+                            # Detect language (fetch posts only if bio detection fails)
+                            language = self._detect_language(profile)
+                            if language == 'unknown':
+                                recent_posts = self._fetch_recent_posts(did, limit=5)
+                                language = self._detect_language(profile, recent_posts)
+
+                            logger.info(f"  ✓ @{handle} passes filters (segment: {segment}, {followers} followers, lang: {language})")
                             targets.append({
                                 "did": did,
                                 "handle": handle,
@@ -91,7 +97,8 @@ class BlueskyFollower:
                                 "followers_count": followers,
                                 "following_count": getattr(profile, 'following_count', 0),
                                 "segment": segment,
-                                "source_hashtag": hashtag
+                                "source_hashtag": hashtag,
+                                "language": language
                             })
                         else:
                             logger.info(f"  Skipping @{handle}: no matching segment ({followers} followers)")
@@ -164,6 +171,78 @@ class BlueskyFollower:
 
         return None
 
+    def _detect_language(self, profile, recent_posts: list = None) -> str:
+        """
+        Detect language of a profile based on bio, handle, and recent posts.
+        Returns: 'fr', 'en', 'es', or 'unknown'
+        """
+        lang_config = self.config.get('language_targeting', {})
+        if not lang_config.get('enabled', False):
+            return 'unknown'
+
+        detect_by = lang_config.get('detect_by', {})
+        bio = (getattr(profile, 'description', '') or '').lower()
+        handle = (getattr(profile, 'handle', '') or '').lower()
+
+        # Check bio keywords for French
+        bio_keywords = detect_by.get('bio_keywords', [])
+        for keyword in bio_keywords:
+            if keyword.lower() in bio:
+                logger.debug(f"  Language: fr (bio contains '{keyword}')")
+                return 'fr'
+
+        # Check handle patterns for French
+        handle_patterns = detect_by.get('handle_patterns', [])
+        for pattern in handle_patterns:
+            if pattern.lower() in handle:
+                logger.debug(f"  Language: fr (handle contains '{pattern}')")
+                return 'fr'
+
+        # Check recent posts for French words
+        if recent_posts:
+            french_words = detect_by.get('french_words', [])
+            posts_text = ' '.join([
+                (getattr(p, 'text', '') or '').lower()
+                for p in recent_posts[:5]
+            ])
+
+            french_word_count = 0
+            for word in french_words:
+                if word.lower() in posts_text:
+                    french_word_count += 1
+
+            # If 3+ French words found, likely French
+            if french_word_count >= 3:
+                logger.debug(f"  Language: fr (posts contain {french_word_count} French words)")
+                return 'fr'
+
+        # Simple detection for other languages
+        spanish_words = [' el ', ' la ', ' los ', ' las ', ' que ', ' es ', ' un ', ' una ']
+        if bio:
+            for word in spanish_words:
+                if word in f' {bio} ':
+                    return 'es'
+
+        # Default to English for accounts with English-looking content
+        english_indicators = ['artist', 'designer', 'creator', 'freelance', 'studio', 'animation']
+        for indicator in english_indicators:
+            if indicator in bio:
+                return 'en'
+
+        return 'unknown'
+
+    def _fetch_recent_posts(self, did: str, limit: int = 5) -> list:
+        """Fetch recent posts from an account for language detection."""
+        try:
+            client = self._connect_bluesky()
+            response = client.app.bsky.feed.get_author_feed(
+                params={"actor": did, "limit": limit}
+            )
+            return [item.post.record for item in response.feed] if response.feed else []
+        except Exception as e:
+            logger.debug(f"  Could not fetch posts for language detection: {e}")
+            return []
+
     def _already_following(self, did: str) -> bool:
         """Check if we're already following this account."""
         conn = get_connection()
@@ -213,9 +292,11 @@ class BlueskyFollower:
 
     def follow_account(self, target: dict, dry_run: bool = False) -> dict:
         """Follow an account and record in database."""
+        language = target.get('language', 'unknown')
+
         if dry_run:
-            logger.info(f"[DRY RUN] Would follow @{target['handle']} ({target['segment']})")
-            return {"success": True, "dry_run": True}
+            logger.info(f"[DRY RUN] Would follow @{target['handle']} ({target['segment']}, lang: {language})")
+            return {"success": True, "dry_run": True, "language": language}
 
         client = self._connect_bluesky()
 
@@ -232,8 +313,8 @@ class BlueskyFollower:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO bluesky_follows
-                (did, handle, display_name, followers_count, following_count, segment, source_hashtag)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (did, handle, display_name, followers_count, following_count, segment, source_hashtag, language)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 target['did'],
                 target['handle'],
@@ -241,13 +322,14 @@ class BlueskyFollower:
                 target['followers_count'],
                 target['following_count'],
                 target['segment'],
-                target['source_hashtag']
+                target['source_hashtag'],
+                language
             ))
             conn.commit()
             conn.close()
 
-            logger.info(f"Followed @{target['handle']} ({target['segment']}, {target['followers_count']} followers)")
-            return {"success": True}
+            logger.info(f"Followed @{target['handle']} ({target['segment']}, {target['followers_count']} followers, lang: {language})")
+            return {"success": True, "language": language}
 
         except Exception as e:
             logger.error(f"Error following @{target['handle']}: {e}")
@@ -256,7 +338,7 @@ class BlueskyFollower:
     def run_follow_session(self, dry_run: bool = False) -> int:
         """
         Execute a follow session.
-        Respects quotas per segment and spaces follows by 10+ minutes.
+        Respects quotas per segment, prioritizes French profiles, and spaces follows by 10+ minutes.
         Returns number of accounts followed.
         """
         init_database()
@@ -286,9 +368,22 @@ class BlueskyFollower:
                 seen.add(t['did'])
                 unique_targets.append(t)
 
-        logger.info(f"Found {len(unique_targets)} unique targets")
+        # Language statistics
+        lang_config = self.config.get('language_targeting', {})
+        french_min_percent = lang_config.get('french_minimum_percent', 30)
 
-        # Group by segment
+        french_targets = [t for t in unique_targets if t.get('language') == 'fr']
+        other_targets = [t for t in unique_targets if t.get('language') != 'fr']
+
+        logger.info(f"Found {len(unique_targets)} unique targets ({len(french_targets)} FR, {len(other_targets)} other)")
+
+        # Prioritize French profiles if language targeting is enabled
+        if lang_config.get('enabled', False) and french_targets:
+            # Sort: French first, then others
+            unique_targets = french_targets + other_targets
+            logger.info(f"Language targeting: prioritizing {len(french_targets)} French profiles")
+
+        # Group by segment (maintaining priority order)
         by_segment = {}
         for t in unique_targets:
             seg = t['segment']
@@ -296,8 +391,9 @@ class BlueskyFollower:
                 by_segment[seg] = []
             by_segment[seg].append(t)
 
-        # Follow respecting quotas
+        # Follow respecting quotas and track language distribution
         followed = 0
+        french_followed = 0
         min_delay = self.config.get('min_delay_between_follows', 600)
 
         for segment_name, targets in by_segment.items():
@@ -305,24 +401,40 @@ class BlueskyFollower:
                 logger.info(f"Segment {segment_name}: quota reached")
                 continue
 
-            random.shuffle(targets)
-
+            # Don't shuffle to maintain French priority
             for target in targets:
                 if not self._can_follow_segment(segment_name):
                     break
                 if followed >= remaining:
                     break
 
+                # Check if we need more French profiles
+                current_french_percent = (french_followed / followed * 100) if followed > 0 else 100
+                target_lang = target.get('language', 'unknown')
+
+                # If we're below French minimum and this isn't French, try to skip (if we have more French targets)
+                if lang_config.get('enabled', False) and followed > 0:
+                    if current_french_percent < french_min_percent and target_lang != 'fr':
+                        # Check if there are more French targets available
+                        remaining_french = [t for t in targets[targets.index(target):] if t.get('language') == 'fr']
+                        if remaining_french:
+                            logger.info(f"  Skipping @{target['handle']} to prioritize French profiles ({current_french_percent:.0f}% < {french_min_percent}%)")
+                            continue
+
                 result = self.follow_account(target, dry_run=dry_run)
                 if result['success']:
                     followed += 1
+                    if result.get('language') == 'fr':
+                        french_followed += 1
 
                     if not dry_run and followed < remaining:
                         delay = min_delay + random.randint(0, 300)
                         logger.info(f"Waiting {delay//60} minutes before next follow...")
                         time.sleep(delay)
 
-        logger.info(f"Session complete: {followed} new follows")
+        # Final language stats
+        french_percent = (french_followed / followed * 100) if followed > 0 else 0
+        logger.info(f"Session complete: {followed} new follows ({french_followed} FR = {french_percent:.0f}%)")
         return followed
 
     def check_follow_backs(self, dry_run: bool = False) -> int:
@@ -480,10 +592,33 @@ class BlueskyFollower:
         """)
         stats['by_segment'] = dict(cursor.fetchall())
 
+        # By language
+        cursor.execute("""
+            SELECT language, COUNT(*) FROM bluesky_follows
+            WHERE unfollowed_at IS NULL
+            GROUP BY language
+        """)
+        stats['by_language'] = dict(cursor.fetchall())
+
+        # French percentage
+        french_count = stats['by_language'].get('fr', 0)
+        if stats['total_following'] > 0:
+            stats['french_percent'] = round(french_count / stats['total_following'] * 100, 1)
+        else:
+            stats['french_percent'] = 0
+
         # Today
         today = datetime.now().strftime("%Y-%m-%d")
         cursor.execute("SELECT COUNT(*) FROM bluesky_follows WHERE DATE(followed_at) = ?", (today,))
         stats['today'] = cursor.fetchone()[0]
+
+        # Today by language
+        cursor.execute("""
+            SELECT language, COUNT(*) FROM bluesky_follows
+            WHERE DATE(followed_at) = ?
+            GROUP BY language
+        """, (today,))
+        stats['today_by_language'] = dict(cursor.fetchall())
 
         # Follow-back rate
         if stats['total_following'] > 0:

@@ -120,9 +120,16 @@ def init_database() -> None:
             follow_back_checked_at TIMESTAMP,
             unfollowed_at TIMESTAMP,
             source_hashtag TEXT,
-            notes TEXT
+            notes TEXT,
+            language TEXT DEFAULT 'unknown'
         )
     """)
+
+    # Add language column if it doesn't exist (for migration)
+    try:
+        cursor.execute("ALTER TABLE bluesky_follows ADD COLUMN language TEXT DEFAULT 'unknown'")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     conn.commit()
     conn.close()
