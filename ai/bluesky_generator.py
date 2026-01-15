@@ -131,7 +131,6 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
     try:
         if is_thread:
             prompt = THREAD_PROMPT.format(
-                hashtags=hashtags,
                 category=category,
                 title=title,
                 excerpt=excerpt[:400]
@@ -139,7 +138,6 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
         else:
             previous_str = ", ".join(previous_posts[:3]) if previous_posts else "Aucun"
             prompt = SIMPLE_PROMPT.format(
-                hashtags=hashtags,
                 category=category,
                 post_type=post_type,
                 title=title,
@@ -174,5 +172,5 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
     except Exception as e:
         logger.error(f"Error generating Bluesky content: {e}")
         # Fallback
-        fallback = f"{title[:200]} [LIEN] {hashtags}"
+        fallback = f"{title[:200]} [LIEN] #3D #CGI #Blender3D"
         return {"type": "simple", "posts": [fallback]}
