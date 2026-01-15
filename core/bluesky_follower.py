@@ -384,23 +384,39 @@ class BlueskyFollower:
         cursor = conn.cursor()
 
         days = self.config.get('unfollow_after_days', 7)
+        whitelist = self.config.get('whitelist', [])
+        never_unfollow_threshold = self.config.get('never_unfollow_above_followers', 5000)
 
         cursor.execute("""
-            SELECT did, handle FROM bluesky_follows
+            SELECT did, handle, followers_count FROM bluesky_follows
             WHERE follow_back = FALSE
             AND unfollowed_at IS NULL
             AND followed_at < datetime('now', ? || ' days')
         """, (f"-{days}",))
 
         to_unfollow = cursor.fetchall()
-        logger.info(f"Found {len(to_unfollow)} accounts to unfollow (no follow-back after {days} days)")
+        logger.info(f"Found {len(to_unfollow)} candidates to unfollow (no follow-back after {days} days)")
 
         unfollowed = 0
+        skipped = 0
         for row in to_unfollow:
             did, handle = row['did'], row['handle']
+            followers_count = row['followers_count'] or 0
+
+            # Skip whitelisted accounts
+            if handle in whitelist:
+                logger.info(f"  Skipping @{handle}: whitelisted")
+                skipped += 1
+                continue
+
+            # Skip high-follower accounts (they rarely follow back but worth keeping)
+            if followers_count >= never_unfollow_threshold:
+                logger.info(f"  Skipping @{handle}: {followers_count} followers (>= {never_unfollow_threshold})")
+                skipped += 1
+                continue
 
             if dry_run:
-                logger.info(f"[DRY RUN] Would unfollow @{handle}")
+                logger.info(f"[DRY RUN] Would unfollow @{handle} ({followers_count} followers)")
                 unfollowed += 1
                 continue
 
@@ -438,7 +454,7 @@ class BlueskyFollower:
 
         conn.commit()
         conn.close()
-        logger.info(f"Unfollowed {unfollowed} accounts")
+        logger.info(f"Unfollowed {unfollowed} accounts, skipped {skipped} (whitelisted or high-follower)")
         return unfollowed
 
     def get_stats(self) -> dict:

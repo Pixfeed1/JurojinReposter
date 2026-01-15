@@ -4,6 +4,15 @@ bluesky_follow:
   unfollow_after_days: 7
   min_delay_between_follows: 600  # 10 minutes en secondes
 
+  # Whitelist - comptes à garder même sans follow-back
+  whitelist:
+    - "maxoncinema4d.bsky.social"
+    - "blaboratory.bsky.social"
+    # Ajouter d'autres comptes importants ici
+
+  # Seuil pour ne jamais unfollow (comptes influents)
+  never_unfollow_above_followers: 5000
+
   # Segments avec quotas journaliers
   segments:
     - name: "micro"
