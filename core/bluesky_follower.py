@@ -62,6 +62,17 @@ class BlueskyFollower:
                 params={"q": f"#{hashtag}", "limit": limit}
             )
 
+            posts_count = len(response.posts) if response.posts else 0
+            seen_dids = set()
+
+            # First pass: count unique authors
+            for post in response.posts:
+                seen_dids.add(post.author.did)
+            unique_authors = len(seen_dids)
+
+            logger.info(f"Searching #{hashtag}: found {posts_count} posts, {unique_authors} unique authors")
+
+            # Reset for actual processing
             seen_dids = set()
             for post in response.posts:
                 author = post.author
@@ -70,27 +81,35 @@ class BlueskyFollower:
                     continue
                 seen_dids.add(author.did)
 
-                if self._passes_filters(author):
+                handle = getattr(author, 'handle', 'unknown')
+                followers = getattr(author, 'followers_count', 0) or 0
+
+                if self._passes_filters(author, log_handle=handle):
                     segment = self._determine_segment(author)
                     if segment:
+                        logger.info(f"  ✓ @{handle} passes filters (segment: {segment}, {followers} followers)")
                         targets.append({
                             "did": author.did,
                             "handle": author.handle,
                             "display_name": getattr(author, 'display_name', None),
-                            "followers_count": getattr(author, 'followers_count', 0),
+                            "followers_count": followers,
                             "following_count": getattr(author, 'following_count', 0),
                             "segment": segment,
                             "source_hashtag": hashtag
                         })
+                    else:
+                        logger.info(f"  Skipping @{handle}: no matching segment ({followers} followers)")
 
         except Exception as e:
             logger.error(f"Error searching hashtag {hashtag}: {e}")
 
+        logger.info(f"  => {len(targets)} targets from #{hashtag}")
         return targets
 
-    def _passes_filters(self, profile) -> bool:
+    def _passes_filters(self, profile, log_handle: str = None) -> bool:
         """Check if a profile passes all filters."""
         filters = self.config['filters']
+        handle = log_handle or getattr(profile, 'handle', 'unknown')
 
         # Bot detection check
         if filters.get('exclude_bots', True):
@@ -100,8 +119,8 @@ class BlueskyFollower:
 
             bot_check = self.bot_detector.is_bot(profile, deep_check=deep_check)
             if bot_check["is_bot"] and bot_check["confidence"] >= min_confidence:
-                handle = getattr(profile, 'handle', 'unknown')
-                logger.info(f"Skipping bot: @{handle} (confidence: {bot_check['confidence']}%, reasons: {bot_check['reasons']})")
+                reasons_str = ', '.join(bot_check['reasons']) if bot_check['reasons'] else 'unknown'
+                logger.info(f"  Skipping @{handle}: bot detected (score: {bot_check['confidence']}, reasons: {reasons_str})")
                 return False
 
         followers = getattr(profile, 'followers_count', 0) or 0
@@ -111,15 +130,18 @@ class BlueskyFollower:
         if followers > 0:
             ratio = following / followers
             if ratio > filters['max_following_ratio']:
+                logger.info(f"  Skipping @{handle}: high following ratio ({ratio:.1f} > {filters['max_following_ratio']})")
                 return False
 
         # Minimum followers
         if followers < 10:
+            logger.info(f"  Skipping @{handle}: too few followers ({followers} < 10)")
             return False
 
         # Check if already following
         if filters.get('exclude_following_back', True):
             if self._already_following(profile.did):
+                logger.info(f"  Skipping @{handle}: already following")
                 return False
 
         return True
