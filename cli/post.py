@@ -4,10 +4,12 @@ CLI command for posting to social media platforms.
 Usage:
     python -m cli.post --platform twitter
     python -m cli.post --platform facebook
+    python -m cli.post --platform bluesky
     python -m cli.post --platform twitter --dry-run
     python -m cli.post --platform twitter --article-id 123
     python -m cli.post --platform twitter --format thread
     python -m cli.post --platform twitter --format simple
+    python -m cli.post --platform bluesky --dry-run
 """
 
 import argparse
@@ -23,8 +25,10 @@ from core.database import init_database, get_article_by_id, add_repost, get_prev
 from core.selector import select_best_article, get_article_eligibility
 from ai.groq_client import generate_accroche
 from ai.thread_generator import generate_twitter_content
+from ai.bluesky_generator import generate_bluesky_content
 from publishers.twitter_direct import publish_to_twitter, post_thread, post_tweet
 from publishers.ayrshare import publish_article as publish_to_facebook
+from publishers.bluesky import post_to_bluesky, post_thread_to_bluesky
 
 
 def setup_logging():
@@ -44,7 +48,7 @@ def setup_logging():
 def main():
     parser = argparse.ArgumentParser(description='Post to social media')
     parser.add_argument('--platform', required=True,
-                        choices=['twitter', 'facebook'],
+                        choices=['twitter', 'facebook', 'bluesky'],
                         help='Platform to post to')
     parser.add_argument('--dry-run', action='store_true',
                         help='Simulate posting without actually posting')
@@ -150,6 +154,64 @@ def main():
                     article_id=article['id'],
                     platform='twitter',
                     accroche=content['tweets'][0],
+                    success=success,
+                    error_message=result.get('error'),
+                    format='simple',
+                    posts_count=1
+                )
+    elif args.platform == 'bluesky':
+        # Generate Bluesky content
+        previous_posts = get_previous_accroches(article['id'], 'bluesky')
+
+        content = generate_bluesky_content(
+            title=article['title'],
+            excerpt=article['excerpt'],
+            category=article.get('category', ''),
+            post_type=article.get('post_type', 'posts'),
+            word_count=article['word_count'],
+            previous_posts=previous_posts
+        )
+
+        # Replace [LIEN] with actual URL
+        posts = [p.replace("[LIEN]", article['url']) for p in content['posts']]
+
+        logger.info(f"Format: {content['type']} ({len(posts)} post(s))")
+        for i, post in enumerate(posts):
+            logger.info(f"  Post {i+1}: {post[:80]}{'...' if len(post) > 80 else ''}")
+
+        if content['type'] == 'thread':
+            result = post_thread_to_bluesky(
+                tweets=posts,
+                url=article['url'],
+                image_url=article.get('image_url'),
+                dry_run=args.dry_run
+            )
+            success = result['success']
+
+            if not args.dry_run:
+                add_repost(
+                    article_id=article['id'],
+                    platform='bluesky',
+                    accroche=posts[0] if posts else '',
+                    success=success,
+                    error_message=result.get('error'),
+                    format='thread',
+                    posts_count=len(posts)
+                )
+        else:
+            result = post_to_bluesky(
+                text=posts[0],
+                url=article['url'],
+                image_url=article.get('image_url'),
+                dry_run=args.dry_run
+            )
+            success = result['success']
+
+            if not args.dry_run:
+                add_repost(
+                    article_id=article['id'],
+                    platform='bluesky',
+                    accroche=posts[0],
                     success=success,
                     error_message=result.get('error'),
                     format='simple',

@@ -88,6 +88,45 @@ def get_top_articles(platform: str, limit: int = 10) -> list:
     return eligible_articles[:limit]
 
 
+def select_article_for_bluesky() -> Optional[dict]:
+    """
+    Select an article for Bluesky.
+
+    Unlike Twitter, Bluesky includes ALL articles (not just evergreen)
+    with a shorter repost interval (30 days).
+
+    Uses random selection among eligible articles to add variety.
+    """
+    import random
+
+    config = load_scoring_config()
+    min_interval = config['min_repost_interval'].get('bluesky', 30)
+
+    articles = get_all_articles(include_excluded=False)
+
+    eligible_articles = []
+
+    for article in articles:
+        # Check if article was reposted recently on Bluesky
+        last_repost = get_last_repost(article['id'], 'bluesky')
+
+        if last_repost:
+            repost_date = datetime.fromisoformat(last_repost['posted_at'])
+            if datetime.now() - repost_date < timedelta(days=min_interval):
+                continue
+
+        eligible_articles.append(article)
+
+    if not eligible_articles:
+        return None
+
+    # Weight selection by score (higher score = more likely to be selected)
+    weights = [max(a['score'], 1) for a in eligible_articles]
+    selected = random.choices(eligible_articles, weights=weights, k=1)[0]
+
+    return selected
+
+
 def get_article_eligibility(article_id: int, platform: str) -> dict:
     """
     Check if an article is eligible for posting on a platform.

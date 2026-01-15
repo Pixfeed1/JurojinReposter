@@ -7,7 +7,9 @@
 # Sync WordPress articles every Sunday at 3:00 AM
 0 3 * * 0 cd /path/to/jurojin-reposter && /path/to/python -m cli.sync >> /path/to/jurojin-reposter/logs/cron.log 2>&1
 
-# Run scheduler every hour (checks if it's time to post)
+# Run scheduler every hour (checks if it's time to post for Twitter, Facebook, Bluesky)
+# Twitter: 09:00, 13:00, 18:00
+# Bluesky: 09:00, 12:00, 15:00, 18:00, 21:00
 0 * * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.scheduler >> /path/to/jurojin-reposter/logs/cron.log 2>&1
 
 # Optional: Full sync on the first of each month

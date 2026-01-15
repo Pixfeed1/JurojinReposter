@@ -34,6 +34,7 @@ weights:
 min_repost_interval:
   twitter: 90
   facebook: 90
+  bluesky: 30
 
 # Twitter format thresholds
 # thread_4: 4 tweets pour les articles longs et bien notés

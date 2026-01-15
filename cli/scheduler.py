@@ -24,8 +24,10 @@ from core.scheduler import (
 from core.selector import select_best_article
 from ai.groq_client import generate_accroche
 from ai.thread_generator import generate_twitter_content
+from ai.bluesky_generator import generate_bluesky_content
 from publishers.twitter_direct import post_thread, post_tweet
 from publishers.ayrshare import publish_article as publish_to_facebook
+from publishers.bluesky import post_to_bluesky, post_thread_to_bluesky
 
 
 def setup_logging():
@@ -132,6 +134,60 @@ def process_platform(platform: str, logger: logging.Logger) -> bool:
                 format='simple',
                 posts_count=1
             )
+    elif platform == 'bluesky':
+        # Generate Bluesky content
+        previous_posts = get_previous_accroches(article['id'], 'bluesky')
+
+        content = generate_bluesky_content(
+            title=article['title'],
+            excerpt=article['excerpt'],
+            category=article.get('category', ''),
+            post_type=article.get('post_type', 'posts'),
+            word_count=article['word_count'],
+            previous_posts=previous_posts
+        )
+
+        # Replace [LIEN] with actual URL
+        posts = [p.replace("[LIEN]", article['url']) for p in content['posts']]
+
+        logger.info(f"Bluesky format: {content['type']} ({len(posts)} post(s))")
+
+        if content['type'] == 'thread':
+            result = post_thread_to_bluesky(
+                tweets=posts,
+                url=article['url'],
+                image_url=article.get('image_url'),
+                dry_run=False
+            )
+            success = result['success']
+
+            add_repost(
+                article_id=article['id'],
+                platform='bluesky',
+                accroche=posts[0] if posts else '',
+                success=success,
+                error_message=result.get('error'),
+                format='thread',
+                posts_count=len(posts)
+            )
+        else:
+            result = post_to_bluesky(
+                text=posts[0],
+                url=article['url'],
+                image_url=article.get('image_url'),
+                dry_run=False
+            )
+            success = result['success']
+
+            add_repost(
+                article_id=article['id'],
+                platform='bluesky',
+                accroche=posts[0],
+                success=success,
+                error_message=result.get('error'),
+                format='simple',
+                posts_count=1
+            )
     else:
         # Generate accroche for Facebook
         accroche = generate_accroche(
@@ -222,7 +278,7 @@ def main():
     init_database()
 
     # Process each platform
-    platforms = ['twitter', 'facebook']
+    platforms = ['twitter', 'facebook', 'bluesky']
     posts_made = 0
 
     for platform in platforms:
