@@ -35,7 +35,7 @@ REGLES :
 - Max 280 caracteres par post (pour laisser place au lien sur le dernier)
 - 1-2 emojis max par post, pas plus
 - Le dernier post contient [LIEN] qui sera remplace par l'URL
-- Ajoute les hashtags UNIQUEMENT sur le dernier post : #JurojinNet + 2 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
+- Ajoute les hashtags UNIQUEMENT sur le dernier post : 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
 
 STRUCTURE DU THREAD :
 Post 1 : Hook accrocheur (question OU fait surprenant)
@@ -60,7 +60,7 @@ REGLES ABSOLUES :
 - Max 250 caracteres (laisser place au lien)
 - 1-2 emojis max, ou zero
 - Terminer par [LIEN]
-- Ajouter les hashtags a la fin : #JurojinNet + 2 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
+- Ajouter les hashtags a la fin : 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
 
 FORMATS (choisis le plus adapte) :
 
@@ -125,7 +125,7 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
     client = get_groq_client()
     if not client:
         # Fallback with default hashtags
-        fallback = f"{title[:200]} [LIEN] #JurojinNet #3D"
+        fallback = f"{title[:200]} [LIEN] #3D #CGI #Blender3D"
         return {"type": "simple", "posts": [fallback]}
 
     try:

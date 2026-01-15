@@ -90,9 +90,9 @@ Format :
 Tweet 1 (max 240 chars) : Hook accrocheur, donne envie de lire la suite. Termine par →
 Tweet 2 (max 240 chars) : Premier point cle ou fait interessant
 Tweet 3 (max 240 chars) : Deuxieme point cle ou insight
-Tweet 4 (max 200 chars) : Conclusion + "[LIEN]" + #JurojinNet + 2 hashtags pertinents que tu choisis selon le sujet
+Tweet 4 (max 200 chars) : Conclusion + "[LIEN]" + 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #3D #Cinema4D #Animation #CGI etc.)
 
-IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Exactement 3 hashtags dont #JurojinNet.
+IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Exactement 3 hashtags.
 
 Reponds UNIQUEMENT avec les 4 tweets separes par ---"""
 
@@ -104,9 +104,9 @@ Extrait : {excerpt}
 Format :
 Tweet 1 (max 240 chars) : Hook accrocheur
 Tweet 2 (max 240 chars) : Point cle principal
-Tweet 3 (max 200 chars) : Conclusion + "[LIEN]" + #JurojinNet + 2 hashtags pertinents que tu choisis selon le sujet
+Tweet 3 (max 200 chars) : Conclusion + "[LIEN]" + 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #3D #Cinema4D #Animation #CGI etc.)
 
-IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Exactement 3 hashtags dont #JurojinNet.
+IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Exactement 3 hashtags.
 
 Reponds UNIQUEMENT avec les 3 tweets separes par ---"""
 
@@ -117,7 +117,7 @@ Extrait : {excerpt}
 Max 240 caracteres (hashtags inclus).
 {previous_note}
 
-Termine avec #JurojinNet + 2 hashtags pertinents que tu choisis selon le sujet. Exactement 3 hashtags.
+Termine avec 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #3D #Cinema4D #Animation #CGI etc.).
 
 Reponds uniquement avec l'accroche, sans guillemets ni explication."""
 
@@ -221,20 +221,20 @@ def generate_simple_groq(client: Groq, title: str, excerpt: str,
 THREAD_FALLBACK_3 = [
     "{title} - un article qui merite votre attention →",
     "Voici ce qu'il faut retenir de cet article complet sur le sujet.",
-    "L'article complet a decouvrir ici [LIEN] #JurojinNet #3D #CGI"
+    "L'article complet a decouvrir ici [LIEN] #3D #CGI #Blender3D"
 ]
 
 THREAD_FALLBACK_4 = [
     "{title} - un sujet passionnant a decouvrir →",
     "Premier point cle : cet article couvre en profondeur tous les aspects du sujet.",
     "Deuxieme point : des conseils pratiques et des exemples concrets.",
-    "Pour aller plus loin, l'article complet est ici [LIEN] #JurojinNet #3D #VFX"
+    "Pour aller plus loin, l'article complet est ici [LIEN] #3D #VFX #CGI"
 ]
 
 SIMPLE_FALLBACK = [
-    "{title} - a relire sur JurojinNet #JurojinNet #3D #CGI",
-    "Un article qui merite qu'on y revienne : {title} #JurojinNet #Blender #3D",
-    "{title} - toujours d'actualite #JurojinNet #VFX #3D",
+    "{title} - a relire #3D #CGI #Blender3D",
+    "Un article qui merite qu'on y revienne : {title} #Blender3D #3D #CGI",
+    "{title} - toujours d'actualite #VFX #3D #Animation",
 ]
 
 
