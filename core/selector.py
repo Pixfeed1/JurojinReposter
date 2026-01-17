@@ -2,6 +2,7 @@
 Selector module for choosing the best article to post.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -9,6 +10,8 @@ import yaml
 
 from config.settings import BASE_DIR
 from core.database import get_all_articles, get_last_repost
+
+logger = logging.getLogger(__name__)
 
 
 def load_scoring_config() -> dict:
@@ -30,9 +33,12 @@ def select_best_article(platform: str) -> Optional[dict]:
     config = load_scoring_config()
     min_interval = config['min_repost_interval'].get(platform, 90)
 
+    logger.info(f"Selecting article for {platform} with min_interval={min_interval} days")
+
     articles = get_all_articles(include_excluded=False)
 
     eligible_articles = []
+    skipped_recently_reposted = []
 
     for article in articles:
         # Check if article was reposted recently on this platform
@@ -40,19 +46,40 @@ def select_best_article(platform: str) -> Optional[dict]:
 
         if last_repost:
             repost_date = datetime.fromisoformat(last_repost['posted_at'])
-            if datetime.now() - repost_date < timedelta(days=min_interval):
+            days_since = (datetime.now() - repost_date).days
+            hours_since = (datetime.now() - repost_date).total_seconds() / 3600
+
+            if days_since < min_interval:
                 # Article was reposted too recently
+                skipped_recently_reposted.append({
+                    'id': article['id'],
+                    'title': article['title'][:30],
+                    'days_since': days_since,
+                    'hours_since': int(hours_since)
+                })
                 continue
 
         eligible_articles.append(article)
 
+    # Log skipped articles (only first 5 to avoid spam)
+    if skipped_recently_reposted:
+        logger.info(f"Skipped {len(skipped_recently_reposted)} recently reposted articles:")
+        for skip in skipped_recently_reposted[:5]:
+            logger.info(f"  - ID {skip['id']} '{skip['title']}...' ({skip['hours_since']}h / {skip['days_since']}d ago)")
+
+    logger.info(f"Found {len(eligible_articles)} eligible articles")
+
     if not eligible_articles:
+        logger.warning(f"No eligible articles found for {platform}")
         return None
 
     # Sort by score descending
     eligible_articles.sort(key=lambda a: a['score'], reverse=True)
 
-    return eligible_articles[0]
+    selected = eligible_articles[0]
+    logger.info(f"Selected article for {platform}: ID={selected['id']} score={selected['score']} '{selected['title'][:40]}...'")
+
+    return selected
 
 
 def get_top_articles(platform: str, limit: int = 10) -> list:
