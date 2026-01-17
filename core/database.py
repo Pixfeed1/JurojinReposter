@@ -3,19 +3,59 @@ Database module for SQLite operations.
 """
 
 import sqlite3
+import time
+import functools
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from config.settings import DATABASE_PATH
 
+logger = logging.getLogger(__name__)
+
+# Database connection settings
+DB_TIMEOUT = 30  # Wait up to 30 seconds for locks
+MAX_RETRIES = 3
+RETRY_DELAY = 1  # seconds
+
 
 def get_connection() -> sqlite3.Connection:
-    """Get a database connection, creating the database if it doesn't exist."""
+    """Get a database connection, creating the database if it doesn't exist.
+
+    Uses WAL mode for better concurrency and a timeout for lock handling.
+    """
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(DATABASE_PATH, timeout=DB_TIMEOUT)
     conn.row_factory = sqlite3.Row
+
+    # Enable WAL mode for better concurrency (allows concurrent reads/writes)
+    conn.execute("PRAGMA journal_mode=WAL")
+    # Reduce lock contention
+    conn.execute("PRAGMA busy_timeout=30000")  # 30 seconds in ms
+
     return conn
+
+
+def retry_on_lock(func):
+    """Decorator to retry database operations on lock errors."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                return func(*args, **kwargs)
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    last_error = e
+                    wait_time = RETRY_DELAY * (2 ** attempt)  # Exponential backoff
+                    logger.warning(f"Database locked, retrying in {wait_time}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    time.sleep(wait_time)
+                else:
+                    raise
+        logger.error(f"Database operation failed after {MAX_RETRIES} retries: {last_error}")
+        raise last_error
+    return wrapper
 
 
 def init_database() -> None:
@@ -135,6 +175,7 @@ def init_database() -> None:
     conn.close()
 
 
+@retry_on_lock
 def upsert_article(article_data: dict) -> int:
     """Insert or update an article. Returns the article ID."""
     conn = get_connection()
@@ -180,6 +221,7 @@ def upsert_article(article_data: dict) -> int:
     return article_id
 
 
+@retry_on_lock
 def update_article_score(article_id: int, score: int) -> None:
     """Update the score of an article."""
     conn = get_connection()
@@ -222,6 +264,7 @@ def get_all_articles(include_excluded: bool = False) -> list:
     return [dict(row) for row in rows]
 
 
+@retry_on_lock
 def exclude_article(article_id: int, excluded: bool = True) -> None:
     """Mark an article as excluded or included."""
     conn = get_connection()
@@ -231,6 +274,7 @@ def exclude_article(article_id: int, excluded: bool = True) -> None:
     conn.close()
 
 
+@retry_on_lock
 def set_priority_boost(article_id: int, boost: int) -> None:
     """Set priority boost for an article."""
     conn = get_connection()
@@ -240,6 +284,7 @@ def set_priority_boost(article_id: int, boost: int) -> None:
     conn.close()
 
 
+@retry_on_lock
 def add_repost(article_id: int, platform: str, accroche: str,
                success: bool, error_message: Optional[str] = None,
                format: str = 'simple', posts_count: int = 1) -> int:
@@ -300,6 +345,7 @@ def get_previous_accroches(article_id: int, platform: str) -> list:
     return [row['accroche'] for row in rows]
 
 
+@retry_on_lock
 def add_to_queue(article_id: int, platform: str, accroche: str,
                  scheduled_at: datetime) -> int:
     """Add a post to the queue. Returns the queue ID."""
@@ -356,6 +402,7 @@ def get_failed_queue(max_attempts: int = 3) -> list:
     return [dict(row) for row in rows]
 
 
+@retry_on_lock
 def update_queue_status(queue_id: int, status: str,
                         error_message: Optional[str] = None) -> None:
     """Update the status of a queue item."""
@@ -371,6 +418,7 @@ def update_queue_status(queue_id: int, status: str,
     conn.close()
 
 
+@retry_on_lock
 def cache_accroche(article_id: int, platform: str, accroche: str) -> int:
     """Cache a generated accroche. Returns the cache ID."""
     conn = get_connection()
