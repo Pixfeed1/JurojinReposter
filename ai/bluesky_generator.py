@@ -4,6 +4,7 @@ Generates posts adapted to article category with appropriate hashtags.
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from groq import Groq
@@ -27,6 +28,7 @@ HASHTAGS_MAP = {
 }
 
 THREAD_PROMPT = """Tu es le community manager de Jurojin.net, blog francais sur la 3D, le cinema et la culture geek.
+Date actuelle : {current_date}
 
 Genere un thread Bluesky de 4 posts pour cet article.
 
@@ -36,6 +38,7 @@ REGLES :
 - 1-2 emojis max par post, pas plus
 - Le dernier post contient [LIEN] qui sera remplace par l'URL
 - Ajoute les hashtags UNIQUEMENT sur le dernier post : 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
+- IMPORTANT : Si tu mentionnes une annee, nous sommes en {current_year}
 
 STRUCTURE DU THREAD :
 Post 1 : Hook accrocheur (question OU fait surprenant)
@@ -51,6 +54,7 @@ Extrait : {excerpt}
 Reponds UNIQUEMENT avec les 4 posts separes par ---"""
 
 SIMPLE_PROMPT = """Tu es le community manager de Jurojin.net, blog francais sur la 3D, le cinema et la culture geek.
+Date actuelle : {current_date}
 
 Genere UN post Bluesky pour cet article.
 
@@ -61,6 +65,7 @@ REGLES ABSOLUES :
 - 1-2 emojis max, ou zero
 - Terminer par [LIEN]
 - Ajouter les hashtags a la fin : 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
+- IMPORTANT : Si tu mentionnes une annee, nous sommes en {current_year}
 
 FORMATS (choisis le plus adapte) :
 
@@ -129,11 +134,17 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
         return {"type": "simple", "posts": [fallback]}
 
     try:
+        now = datetime.now()
+        current_date = now.strftime("%d %B %Y")
+        current_year = now.year
+
         if is_thread:
             prompt = THREAD_PROMPT.format(
                 category=category,
                 title=title,
-                excerpt=excerpt[:400]
+                excerpt=excerpt[:400],
+                current_date=current_date,
+                current_year=current_year
             )
         else:
             previous_str = ", ".join(previous_posts[:3]) if previous_posts else "Aucun"
@@ -142,7 +153,9 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
                 post_type=post_type,
                 title=title,
                 excerpt=excerpt[:300],
-                previous_posts=previous_str
+                previous_posts=previous_str,
+                current_date=current_date,
+                current_year=current_year
             )
 
         response = client.chat.completions.create(

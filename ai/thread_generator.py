@@ -4,6 +4,7 @@ Generates either a simple tweet or a thread based on article score and word coun
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from groq import Groq
@@ -76,10 +77,12 @@ def get_groq_client() -> Optional[Groq]:
         return None
 
 
-SYSTEM_PROMPT = """Tu es un community manager pour Jurojin.net, blog tech/3D/CGI.
+SYSTEM_PROMPT_TEMPLATE = """Tu es un community manager pour Jurojin.net, blog tech/3D/CGI.
+Date actuelle : {current_date}
 Ton : expert decontracte, jamais putaclic.
 Pas d'emojis excessifs (1-2 max par tweet).
-Ne numerote PAS les tweets (pas de 1/4, 2/4, etc.)"""
+Ne numerote PAS les tweets (pas de 1/4, 2/4, etc.)
+IMPORTANT : Si tu mentionnes une annee, nous sommes en {current_year}."""
 
 
 THREAD_4_PROMPT = """Genere un thread Twitter de 4 tweets pour cet article.
@@ -140,6 +143,14 @@ def parse_thread_response(response: str, expected_count: int) -> list:
 def generate_thread_groq(client: Groq, title: str, excerpt: str,
                          thread_type: str) -> Optional[list]:
     """Generate a thread using Groq API."""
+    now = datetime.now()
+    current_date = now.strftime("%d %B %Y")
+    current_year = now.year
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        current_date=current_date,
+        current_year=current_year
+    )
+
     if thread_type == 'thread_4':
         prompt = THREAD_4_PROMPT.format(title=title, excerpt=excerpt[:400])
         expected_count = 4
@@ -151,7 +162,7 @@ def generate_thread_groq(client: Groq, title: str, excerpt: str,
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=500,
@@ -176,6 +187,14 @@ def generate_thread_groq(client: Groq, title: str, excerpt: str,
 def generate_simple_groq(client: Groq, title: str, excerpt: str,
                          previous_hooks: list) -> Optional[str]:
     """Generate a simple tweet using Groq API."""
+    now = datetime.now()
+    current_date = now.strftime("%d %B %Y")
+    current_year = now.year
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        current_date=current_date,
+        current_year=current_year
+    )
+
     previous_note = ""
     if previous_hooks:
         previous_note = f"Accroches deja utilisees (a ne pas repeter) : {', '.join(previous_hooks[:3])}"
@@ -190,7 +209,7 @@ def generate_simple_groq(client: Groq, title: str, excerpt: str,
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=150,
