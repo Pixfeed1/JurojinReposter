@@ -13,7 +13,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import LOG_PATH
-from core.database import init_database, update_queue_status, add_repost, get_previous_accroches
+from core.database import (
+    init_database, update_queue_status, add_repost, get_previous_accroches,
+    get_daily_count, increment_daily_count, add_external_post
+)
 from core.scheduler import (
     is_scheduled_time,
     should_post_today,
@@ -22,11 +25,15 @@ from core.scheduler import (
     get_retry_config
 )
 from core.selector import select_best_article
+from core.catchup import get_catchup_articles, get_catchup_count_today, record_catchup_post
 from ai.groq_client import generate_accroche
 from ai.thread_generator import generate_twitter_content
 from ai.bluesky_generator import generate_bluesky_content
+from ai.facebook_generator import generate_facebook_content
+from ai.curation_filter import process_external_items
+from sources.external_feeds import fetch_new_items
 from publishers.twitter_direct import post_thread, post_tweet
-from publishers.ayrshare import publish_article as publish_to_facebook
+from publishers.ayrshare import publish_article as publish_to_facebook, publish_external
 from publishers.bluesky import post_to_bluesky, post_thread_to_bluesky
 
 
@@ -188,28 +195,148 @@ def process_platform(platform: str, logger: logging.Logger) -> bool:
                 format='simple',
                 posts_count=1
             )
-    else:
-        # Generate accroche for Facebook
-        accroche = generate_accroche(
-            article_id=article['id'],
-            title=article['title'],
-            excerpt=article['excerpt'],
-            platform=platform
-        )
-        logger.info(f"Generated accroche: {accroche}")
-
-        success = publish_to_facebook(
-            article_id=article['id'],
-            article_url=article['url'],
-            accroche=accroche,
-            platform=platform,
-            image_url=article.get('image_url')
-        )
+    elif platform == 'facebook':
+        return process_facebook(article, logger)
 
     if success:
         logger.info(f"Successfully posted to {platform}")
     else:
         logger.error(f"Failed to post to {platform}")
+
+    return success
+
+
+def process_facebook(article: dict, logger: logging.Logger) -> bool:
+    """
+    Process a Facebook post for a jurojin.net article.
+    Uses the dedicated Facebook generator with intelligent linking.
+    """
+    previous_posts = get_previous_accroches(article['id'], 'facebook')
+
+    content = generate_facebook_content(
+        title=article['title'],
+        excerpt=article['excerpt'],
+        category=article.get('category', ''),
+        previous_posts=previous_posts
+    )
+
+    accroche = content['accroche']
+    logger.info(f"Generated Facebook accroche: {accroche[:80]}...")
+    if content.get('linked_url'):
+        logger.info(f"  Linked article: {content['linked_url']}")
+
+    success = publish_to_facebook(
+        article_id=article['id'],
+        article_url=article['url'],
+        accroche=accroche,
+        platform='facebook',
+        image_url=article.get('image_url')
+    )
+
+    if success:
+        logger.info("Successfully posted jurojin article to Facebook")
+    else:
+        logger.error("Failed to post jurojin article to Facebook")
+
+    return success
+
+
+def process_facebook_catchup(logger: logging.Logger) -> bool:
+    """
+    Process catchup: post articles never shared on Facebook.
+    Max 2 per day.
+    """
+    config = load_scheduling_config()
+    max_catchup = config.get('facebook', {}).get('max_catchup_per_day', 2)
+
+    current_count = get_catchup_count_today()
+    if current_count >= max_catchup:
+        logger.debug(f"Catchup limit reached ({current_count}/{max_catchup})")
+        return False
+
+    articles = get_catchup_articles(limit=1)
+    if not articles:
+        return False
+
+    article = articles[0]
+    logger.info(f"Facebook catchup: {article['title'][:50]}...")
+
+    previous_posts = get_previous_accroches(article['id'], 'facebook')
+    content = generate_facebook_content(
+        title=article['title'],
+        excerpt=article['excerpt'],
+        category=article.get('category', ''),
+        previous_posts=previous_posts
+    )
+
+    success = publish_to_facebook(
+        article_id=article['id'],
+        article_url=article['url'],
+        accroche=content['accroche'],
+        platform='facebook',
+        image_url=article.get('image_url')
+    )
+
+    if success:
+        record_catchup_post()
+        logger.info("Facebook catchup post successful")
+    else:
+        logger.error("Facebook catchup post failed")
+
+    return success
+
+
+def process_facebook_curation(logger: logging.Logger) -> bool:
+    """
+    Process curation: share filtered external articles on Facebook.
+    Max 3 per day.
+    """
+    config = load_scheduling_config()
+    max_external = config.get('facebook', {}).get('max_external_per_day', 3)
+
+    current_count = get_daily_count('external')
+    if current_count >= max_external:
+        logger.debug(f"External posts limit reached ({current_count}/{max_external})")
+        return False
+
+    # Fetch new items from RSS feeds
+    new_items = fetch_new_items(max_per_category=3)
+    if not new_items:
+        logger.debug("No new external items found")
+        return False
+
+    # Filter and generate accroches via AI
+    accepted = process_external_items(new_items)
+    if not accepted:
+        logger.debug("No external items passed curation filter")
+        return False
+
+    # Post the first accepted item
+    item = accepted[0]
+    logger.info(f"Facebook curation: {item['title'][:50]}... (via {item['source_name']})")
+
+    success = publish_external(
+        source_url=item['url'],
+        accroche=item['accroche'],
+        source_name=item['source_name'],
+        image_url=None
+    )
+
+    if success:
+        # Record in database
+        add_external_post(
+            source_url=item['url'],
+            source_name=item['source_name'],
+            category=item['category'],
+            title=item['title'],
+            description=item.get('description', ''),
+            accroche=item['accroche'],
+            linked_article_url=item.get('linked_url')
+        )
+        increment_daily_count('external')
+        logger.info("Facebook curation post successful")
+    else:
+        logger.error("Facebook curation post failed")
 
     return success
 
@@ -278,15 +405,46 @@ def main():
     init_database()
 
     # Process each platform
-    platforms = ['twitter', 'facebook', 'bluesky']
     posts_made = 0
 
-    for platform in platforms:
+    # Twitter and Bluesky: standard processing
+    for platform in ['twitter', 'bluesky']:
         try:
             if process_platform(platform, logger):
                 posts_made += 1
         except Exception as e:
             logger.error(f"Error processing {platform}: {e}")
+
+    # Facebook: priority system (jurojin > catchup > curation)
+    try:
+        config = load_scheduling_config()
+        fb_config = config.get('facebook', {})
+
+        if fb_config.get('enabled', False) and is_scheduled_time('facebook'):
+            facebook_posted = False
+
+            # Priority 1: jurojin.net article
+            article = select_best_article('facebook')
+            if article:
+                logger.info(f"Facebook priority 1: jurojin article '{article['title'][:40]}...'")
+                facebook_posted = process_facebook(article, logger)
+
+            # Priority 2: catchup (if no jurojin article posted)
+            if not facebook_posted:
+                logger.info("Facebook priority 2: checking catchup...")
+                facebook_posted = process_facebook_catchup(logger)
+
+            # Priority 3: external curation (if nothing else posted)
+            if not facebook_posted:
+                logger.info("Facebook priority 3: checking curation...")
+                facebook_posted = process_facebook_curation(logger)
+
+            if facebook_posted:
+                posts_made += 1
+            else:
+                logger.info("Facebook: nothing to post this slot")
+    except Exception as e:
+        logger.error(f"Error processing facebook: {e}")
 
     # Process retries
     try:

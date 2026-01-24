@@ -159,6 +159,33 @@ def publish_article(article_id: int, article_url: str, accroche: str,
     return result['success']
 
 
+def publish_external(source_url: str, accroche: str, source_name: str,
+                     image_url: Optional[str] = None,
+                     dry_run: bool = False) -> bool:
+    """
+    Publish an external article to Facebook.
+
+    Args:
+        source_url: The external article URL
+        accroche: The hook text
+        source_name: Name of the source (e.g., "3DVF", "The Verge")
+        image_url: Optional image URL
+        dry_run: If True, don't actually post
+
+    Returns:
+        True if successful, False otherwise
+    """
+    publisher = AyrsharePublisher()
+    result = publisher.post(accroche, source_url, 'facebook', image_url, dry_run)
+
+    if result['success']:
+        logger.info(f"Published external article from {source_name} to Facebook")
+    else:
+        logger.error(f"Failed to publish external article: {result['error_message']}")
+
+    return result['success']
+
+
 def check_api_status() -> dict:
     """
     Check the Ayrshare API status and configuration.

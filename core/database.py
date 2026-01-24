@@ -171,6 +171,34 @@ def init_database() -> None:
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # External posts table (curation from RSS feeds)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS external_posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_url TEXT UNIQUE NOT NULL,
+            source_name TEXT NOT NULL,
+            category TEXT,
+            title TEXT NOT NULL,
+            description TEXT,
+            accroche TEXT,
+            linked_article_url TEXT,
+            posted_at TIMESTAMP,
+            facebook_post_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Daily counters for Facebook scheduling
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS facebook_daily_counters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            counter_type TEXT NOT NULL,
+            count INTEGER DEFAULT 0,
+            UNIQUE(date, counter_type)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -521,3 +549,135 @@ def get_stats() -> dict:
 
     conn.close()
     return stats
+
+
+# === External posts (curation) ===
+
+def is_external_post_known(source_url: str) -> bool:
+    """Check if an external article has already been processed."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM external_posts WHERE source_url = ?", (source_url,))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
+
+
+@retry_on_lock
+def add_external_post(source_url: str, source_name: str, category: str,
+                      title: str, description: str, accroche: str,
+                      linked_article_url: Optional[str] = None) -> int:
+    """Add an external post to the database. Returns the post ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO external_posts (source_url, source_name, category, title,
+                                    description, accroche, linked_article_url, posted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (source_url, source_name, category, title, description, accroche,
+          linked_article_url, datetime.now().isoformat()))
+    conn.commit()
+    post_id = cursor.lastrowid
+    conn.close()
+    return post_id
+
+
+def get_pending_external_posts(limit: int = 5) -> list:
+    """Get external posts that haven't been posted to Facebook yet."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM external_posts
+        WHERE facebook_post_id IS NULL
+        ORDER BY created_at ASC
+        LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+@retry_on_lock
+def mark_external_post_published(post_id: int, facebook_post_id: str) -> None:
+    """Mark an external post as published to Facebook."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE external_posts
+        SET facebook_post_id = ?, posted_at = ?
+        WHERE id = ?
+    """, (facebook_post_id, datetime.now().isoformat(), post_id))
+    conn.commit()
+    conn.close()
+
+
+# === Daily counters ===
+
+def get_daily_count(counter_type: str) -> int:
+    """Get today's count for a counter type (catchup, external)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("""
+        SELECT count FROM facebook_daily_counters
+        WHERE date = ? AND counter_type = ?
+    """, (today, counter_type))
+    row = cursor.fetchone()
+    conn.close()
+    return row['count'] if row else 0
+
+
+@retry_on_lock
+def increment_daily_count(counter_type: str) -> None:
+    """Increment today's counter for a given type."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    today = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("""
+        INSERT INTO facebook_daily_counters (date, counter_type, count)
+        VALUES (?, ?, 1)
+        ON CONFLICT(date, counter_type) DO UPDATE SET count = count + 1
+    """, (today, counter_type))
+    conn.commit()
+    conn.close()
+
+
+def find_related_article(title: str, category: str = None) -> Optional[dict]:
+    """Find a related jurojin article by category and keyword matching."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Extract keywords from title (words > 4 chars)
+    keywords = [w.lower() for w in title.split() if len(w) > 4]
+
+    # First: try matching by category
+    if category:
+        cursor.execute("""
+            SELECT id, url, title, category FROM articles
+            WHERE excluded = 0 AND category = ?
+            ORDER BY score DESC LIMIT 10
+        """, (category,))
+        category_matches = [dict(row) for row in cursor.fetchall()]
+
+        # Check keyword overlap
+        for article in category_matches:
+            article_words = [w.lower() for w in article['title'].split() if len(w) > 4]
+            overlap = set(keywords) & set(article_words)
+            if overlap:
+                conn.close()
+                return article
+
+    # Second: keyword search across all articles
+    for keyword in keywords[:5]:
+        cursor.execute("""
+            SELECT id, url, title, category FROM articles
+            WHERE excluded = 0 AND (title LIKE ? OR excerpt LIKE ?)
+            ORDER BY score DESC LIMIT 1
+        """, (f"%{keyword}%", f"%{keyword}%"))
+        row = cursor.fetchone()
+        if row:
+            conn.close()
+            return dict(row)
+
+    conn.close()
+    return None

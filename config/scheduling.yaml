@@ -13,10 +13,12 @@ twitter:
   thread_days: ["tuesday", "thursday"]
 
 facebook:
-  enabled: false
-  times: ["11:00"]
-  post_every_n_days: 2
+  enabled: true
+  times: ["09:00", "12:30", "18:00", "21:00"]
   timezone: "Europe/Paris"
+  # Priorité : jurojin > rattrapage > curation externe
+  max_catchup_per_day: 2
+  max_external_per_day: 3
 
 bluesky:
   enabled: true

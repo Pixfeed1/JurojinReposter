@@ -1,0 +1,66 @@
+sources:
+  3d:
+    - url: "https://3dvf.com/feed/"
+      name: "3DVF"
+      filter: "interview_only"
+    - url: "https://80.lv/feed/"
+      name: "80.lv"
+      filter: "interview_only"
+    - url: "https://www.blendernation.com/feed/"
+      name: "Blender Nation"
+      filter: "interview_only"
+    - url: "https://www.creativebloq.com/feed"
+      name: "Creative Bloq"
+      filter: "interview_only"
+
+  gaming:
+    - url: "https://actugaming.net/feed/"
+      name: "ActuGaming"
+      filter: "interview_only"
+    - url: "https://www.gamekult.com/feed.xml"
+      name: "Gamekult"
+      filter: "interview_only"
+    - url: "https://www.jeuxvideo.com/rss/rss.xml"
+      name: "JeuxVideo.com"
+      filter: "interview_only"
+
+  cinema:
+    - url: "https://www.telerama.fr/rss/cinema.xml"
+      name: "Telerama"
+      filter: "interview_only"
+    - url: "https://www.allocine.fr/rss/"
+      name: "Allocine"
+      filter: "interview_only"
+    - url: "https://www.premiere.fr/rss"
+      name: "Premiere"
+      filter: "interview_only"
+    - url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCpfwVMhCOyFpxLnEpkW4sDg"
+      name: "Captain Popcorn"
+      filter: "interview_only"
+      type: "youtube"
+
+  tech_us:
+    - url: "https://www.theverge.com/rss/index.xml"
+      name: "The Verge"
+      filter: "news"
+    - url: "https://www.wired.com/feed/rss"
+      name: "Wired"
+      filter: "news"
+    - url: "https://feeds.arstechnica.com/arstechnica/index"
+      name: "Ars Technica"
+      filter: "news"
+    - url: "https://techcrunch.com/feed/"
+      name: "TechCrunch"
+      filter: "news"
+
+filters:
+  interview_only:
+    require_keywords: ["interview", "entretien", "rencontre", "confession", "revele", "confie", "behind the scenes", "making of", "artist spotlight", "exclusive", "exclu"]
+    reject_keywords: ["tutorial", "tuto", "how to", "guide", "tips", "astuce", "top 10", "top 5", "best of"]
+  news:
+    require_keywords: []
+    reject_keywords: ["sponsored", "advertisement", "top 10", "top 5"]
+
+settings:
+  max_external_posts_per_day: 3
+  check_interval_hours: 2
