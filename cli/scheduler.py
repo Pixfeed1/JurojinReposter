@@ -33,7 +33,7 @@ from ai.facebook_generator import generate_facebook_content
 from ai.curation_filter import process_external_items
 from sources.external_feeds import fetch_new_items
 from publishers.twitter_direct import post_thread, post_tweet
-from publishers.ayrshare import publish_article as publish_to_facebook, publish_external
+from publishers.facebook import publish_article as publish_to_facebook, publish_external
 from publishers.bluesky import post_to_bluesky, post_thread_to_bluesky
 
 

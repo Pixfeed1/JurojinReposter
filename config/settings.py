@@ -27,9 +27,12 @@ WORDPRESS_POST_TYPES = [
 ]
 
 # API Keys (set via environment variables or directly here)
-AYRSHARE_API_KEY = os.getenv("AYRSHARE_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.3-70b-versatile"
+
+# Facebook Graph API
+FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "")
+FACEBOOK_PAGE_ACCESS_TOKEN = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
 
 # Database and logging paths
 DATABASE_PATH = BASE_DIR / "data" / "jurojin.db"
@@ -40,6 +43,3 @@ CHAR_LIMITS = {
     "twitter": 240,
     "facebook": 300,
 }
-
-# Ayrshare API endpoint
-AYRSHARE_API_URL = "https://api.ayrshare.com/api/post"

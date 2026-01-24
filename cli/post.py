@@ -27,7 +27,7 @@ from ai.groq_client import generate_accroche
 from ai.thread_generator import generate_twitter_content
 from ai.bluesky_generator import generate_bluesky_content
 from publishers.twitter_direct import publish_to_twitter, post_thread, post_tweet
-from publishers.ayrshare import publish_article as publish_to_facebook
+from publishers.facebook import publish_article as publish_to_facebook
 from publishers.bluesky import post_to_bluesky, post_thread_to_bluesky
 
 
