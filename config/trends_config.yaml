@@ -1,0 +1,152 @@
+# Configuration TrendsToWordPress
+# Thématiques à surveiller sur Google Trends
+
+keywords:
+  3d:
+    - Blender
+    - Cinema 4D
+    - Maya
+    - ZBrush
+    - Substance Painter
+    - Houdini
+    - geometry nodes
+    - sculpting
+    - procedural modeling
+    - Blender 4
+    - Blender 5
+
+  2d:
+    - Photoshop
+    - Procreate
+    - Krita
+    - Clip Studio Paint
+    - digital painting
+    - concept art
+    - illustration numerique
+
+  vfx:
+    - After Effects
+    - Nuke
+    - DaVinci Resolve
+    - compositing
+    - motion design
+    - VFX
+    - effets speciaux
+
+  hardware:
+    - Wacom
+    - XP-Pen
+    - tablette graphique
+    - Huion
+    - GPU render
+    - RTX 5090
+    - Apple M4
+
+  cao:
+    - AutoCAD
+    - SketchUp
+    - Fusion 360
+    - FreeCAD
+    - modelisation 3D
+    - impression 3D
+
+  moteurs:
+    - Unreal Engine
+    - Unity
+    - Godot
+    - Unreal Engine 5
+    - game engine
+    - MetaHuman
+
+  ia_generative:
+    - Stable Diffusion
+    - Midjourney
+    - ComfyUI
+    - ControlNet
+    - DALL-E
+    - Sora
+    - AI art
+    - IA generative
+    - Flux AI
+
+  reseaux_sociaux:
+    - Twitter
+    - Instagram
+    - TikTok
+    - YouTube
+    - Bluesky
+    - algorithme
+    - engagement
+    - monetisation
+
+  cinema_series:
+    - cyberpunk
+    - dystopie
+    - Blade Runner
+    - Matrix
+    - Black Mirror
+    - Akira
+    - science fiction
+    - anime film
+
+  anime:
+    - Dragon Ball
+    - Naruto
+    - One Piece
+    - anime
+    - manga
+    - Akira Toriyama
+    - Studio Ghibli
+    - Chainsaw Man
+
+  pop_culture:
+    - Michael Jackson
+    - Terminator
+    - Star Wars
+    - Marvel
+    - DC Comics
+    - retro gaming
+
+# Catégories de trends générales à scanner (Google Trends)
+general_categories:
+  - technology
+  - entertainment
+  - games
+
+# Matching config
+matching:
+  # Seuil minimum de similarité pour matcher (0-100)
+  min_similarity_score: 60
+  # Nombre max d'articles liés à inclure dans le prompt
+  max_related_articles: 5
+  # Nombre max de prompts à générer par jour
+  max_prompts_per_day: 3
+
+# Types d'articles et longueurs
+article_types:
+  actu:
+    min_words: 800
+    max_words: 1000
+  tuto:
+    min_words: 1200
+    max_words: 1500
+  guide:
+    min_words: 1500
+    max_words: 2500
+  comparatif:
+    min_words: 1200
+    max_words: 2000
+  opinion:
+    min_words: 800
+    max_words: 1200
+
+# Scheduling
+schedule:
+  enabled: true
+  time: "07:00"
+  timezone: "Europe/Paris"
+
+# WordPress
+wordpress:
+  default_category: "Actualités"
+  draft_title_prefix: "[BRIEF]"

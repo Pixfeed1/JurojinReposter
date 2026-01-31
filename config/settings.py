@@ -16,6 +16,8 @@ load_dotenv(BASE_DIR / ".env")
 # WordPress API configuration
 WORDPRESS_URL = "https://jurojin.net/wp-json/wp/v2"
 WORDPRESS_PER_PAGE = 100
+WORDPRESS_USERNAME = os.getenv("WORDPRESS_USERNAME", "")
+WORDPRESS_APP_PASSWORD = os.getenv("WORDPRESS_APP_PASSWORD", "")
 
 # Custom Post Types to synchronize
 WORDPRESS_POST_TYPES = [

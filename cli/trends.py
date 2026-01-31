@@ -1,0 +1,216 @@
+"""
+CLI command for TrendsToWordPress.
+Monitors Google Trends and creates article briefs as WordPress drafts.
+
+Usage:
+    python -m cli.trends              # Full run (fetch trends + create drafts)
+    python -m cli.trends --dry-run    # Show what would be created
+    python -m cli.trends --trends     # Only show trends without creating drafts
+    python -m cli.trends --status     # Check API connectivity
+"""
+
+import argparse
+import logging
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from config.settings import LOG_PATH, BASE_DIR
+from core.database import init_database
+from sources.google_trends import fetch_all_trends
+from core.article_matcher import find_opportunities, get_best_opportunities
+from ai.prompt_generator import generate_article_brief
+from publishers.wordpress_draft import publish_brief, check_api_status
+import yaml
+
+
+def setup_logging():
+    """Configure logging."""
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(LOG_PATH),
+            logging.StreamHandler()
+        ]
+    )
+
+
+def load_config() -> dict:
+    """Load trends configuration."""
+    config_path = BASE_DIR / "config" / "trends_config.yaml"
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+def show_trends(trends: dict):
+    """Display fetched trends in a readable format."""
+    print("\n" + "=" * 60)
+    print("📊 GOOGLE TRENDS - RESULTATS")
+    print("=" * 60)
+
+    print("\n🎯 TENDANCES SUR NOS MOTS-CLES :")
+    print("-" * 40)
+    for trend in trends.get('predefined', [])[:15]:
+        bar = "█" * (trend['interest'] // 5)
+        print(f"  {trend['keyword'][:30]:<30} {trend['interest']:>3} {bar}")
+
+    print("\n🔥 TENDANCES GENERALES FRANCE :")
+    print("-" * 40)
+    for trend in trends.get('general', [])[:15]:
+        source = trend.get('source', 'general')[:15]
+        print(f"  {trend['keyword'][:40]:<40} [{source}]")
+
+
+def show_opportunities(opportunities: list):
+    """Display opportunities in a readable format."""
+    print("\n" + "=" * 60)
+    print("💡 OPPORTUNITES DE CONTENU")
+    print("=" * 60)
+
+    for i, opp in enumerate(opportunities[:10], 1):
+        print(f"\n{i}. {opp['trend']}")
+        print(f"   Type: {opp['opportunity_type']} | Score: {opp['score']}")
+        print(f"   Articles lies: {len(opp.get('related_articles', []))}")
+        if opp.get('related_articles'):
+            for article in opp['related_articles'][:2]:
+                print(f"     - {article['title'][:50]}...")
+
+
+def run_trends_check(dry_run: bool = False):
+    """Main function to check trends and create drafts."""
+    logger = logging.getLogger(__name__)
+
+    logger.info("=" * 50)
+    logger.info("TrendsToWordPress - Starting...")
+
+    # Initialize database
+    init_database()
+
+    # Load config
+    config = load_config()
+    max_prompts = config.get('matching', {}).get('max_prompts_per_day', 3)
+
+    # Fetch trends
+    logger.info("Fetching Google Trends...")
+    trends = fetch_all_trends()
+
+    show_trends(trends)
+
+    # Find opportunities
+    logger.info("Analyzing opportunities...")
+    opportunities = find_opportunities(
+        trends.get('predefined', []),
+        trends.get('general', [])
+    )
+
+    show_opportunities(opportunities)
+
+    # Select best opportunities
+    best = get_best_opportunities(opportunities, max_count=max_prompts)
+
+    if not best:
+        logger.info("No significant opportunities found today")
+        print("\n❌ Pas d'opportunite significative detectee")
+        return
+
+    print(f"\n✅ {len(best)} opportunite(s) selectionnee(s) pour generation de brief")
+
+    # Generate and publish briefs
+    created_count = 0
+    for opp in best:
+        logger.info(f"Generating brief for: {opp['trend']}")
+
+        # Generate the brief
+        brief = generate_article_brief(opp)
+
+        print(f"\n📝 Brief genere: {brief['title']}")
+        print(f"   Type: {brief['article_type']} | Urgence: {brief['urgency']}")
+        print(f"   Categorie: {brief['category']}")
+        print(f"   Tags: {', '.join(brief['tags'][:5])}")
+
+        # Publish to WordPress
+        result = publish_brief(brief, dry_run=dry_run)
+
+        if result['success']:
+            created_count += 1
+            if dry_run:
+                print("   ➡️  [DRY RUN] Draft would be created")
+            else:
+                print(f"   ✅ Draft cree: ID={result['post_id']}")
+                if result.get('url'):
+                    print(f"   🔗 {result['url']}")
+        else:
+            print(f"   ❌ Erreur: {result['error']}")
+
+    logger.info(f"TrendsToWordPress completed. Briefs created: {created_count}")
+    print(f"\n{'=' * 60}")
+    print(f"✅ Termine - {created_count} brief(s) cree(s)")
+    print("=" * 60)
+
+
+def check_status():
+    """Check API connectivity."""
+    print("\n📡 Verification des connexions API...")
+    print("-" * 40)
+
+    # Check WordPress
+    wp_status = check_api_status()
+    if wp_status['connected']:
+        print(f"✅ WordPress: Connecte ({wp_status.get('username', 'OK')})")
+    else:
+        print(f"❌ WordPress: {wp_status.get('error', 'Non connecte')}")
+
+    # Check Groq
+    from ai.prompt_generator import get_groq_client
+    groq_client = get_groq_client()
+    if groq_client:
+        print("✅ Groq: Configure")
+    else:
+        print("❌ Groq: Non configure (GROQ_API_KEY manquant)")
+
+    # Check pytrends
+    try:
+        from pytrends.request import TrendReq
+        print("✅ pytrends: Installe")
+    except ImportError:
+        print("❌ pytrends: Non installe (pip install pytrends)")
+
+
+def main():
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    parser = argparse.ArgumentParser(description='TrendsToWordPress - Monitor trends and create article briefs')
+    parser.add_argument('--dry-run', action='store_true', help='Show what would be created without creating')
+    parser.add_argument('--trends', action='store_true', help='Only show trends without creating drafts')
+    parser.add_argument('--status', action='store_true', help='Check API connectivity')
+
+    args = parser.parse_args()
+
+    if args.status:
+        check_status()
+        return
+
+    if args.trends:
+        logger.info("Fetching trends only...")
+        trends = fetch_all_trends()
+        show_trends(trends)
+
+        opportunities = find_opportunities(
+            trends.get('predefined', []),
+            trends.get('general', [])
+        )
+        show_opportunities(opportunities)
+        return
+
+    # Full run
+    run_trends_check(dry_run=args.dry_run)
+
+
+if __name__ == '__main__':
+    main()
