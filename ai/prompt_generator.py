@@ -45,15 +45,15 @@ SCORE INTERET : {interest}/100
 ARTICLES EXISTANTS LIES :
 {existing_articles}
 
-Analyse cette opportunite et reponds en JSON :
+Analyse cette opportunite. REPONDS UNIQUEMENT avec un objet JSON valide, sans texte avant ni apres :
 {{
-    "titre_suggere": "Titre optimise SEO (60 chars max)",
+    "titre_suggere": "Titre optimise SEO en francais (60 chars max)",
     "type_article": "actu|tuto|guide|comparatif|opinion",
     "urgence": "ephemere|durable",
-    "pertinence_score": 1-10,
+    "pertinence_score": 7,
     "public_cible": "debutant|intermediaire|avance",
-    "angle_unique": "Ce qui differencie cet article des autres",
-    "longtail_keywords": ["variation 1", "variation 2", "variation 3"],
+    "angle_unique": "Ce qui differencie cet article",
+    "longtail_keywords": ["keyword longue traine 1", "keyword 2", "keyword 3"],
     "sections_suggeres": ["Section 1", "Section 2", "Section 3", "Section 4"]
 }}"""
 
@@ -100,13 +100,40 @@ def analyze_opportunity(opportunity: dict) -> dict:
 
         content = response.choices[0].message.content.strip()
 
-        # Parse JSON response
+        # Parse JSON response - handle various formats
         import json
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        import re
 
-        return json.loads(content)
+        # Try to extract JSON from the response
+        # Handle ```json ... ``` blocks
+        if "```" in content:
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
+            if json_match:
+                content = json_match.group(1).strip()
 
+        # Try to find JSON object in response
+        if not content.startswith('{'):
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if json_match:
+                content = json_match.group(0)
+
+        result = json.loads(content)
+        logger.info(f"AI analysis successful for: {opportunity['trend']}")
+        return result
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error for {opportunity['trend']}: {e}")
+        logger.debug(f"Raw content: {content[:500] if 'content' in dir() else 'N/A'}")
+        return {
+            'titre_suggere': f"{opportunity['trend']} : Guide complet {datetime.now().year}",
+            'type_article': 'guide',
+            'urgence': 'durable',
+            'pertinence_score': 7,
+            'public_cible': 'intermediaire',
+            'angle_unique': f"Tout savoir sur {opportunity['trend']} en {datetime.now().year}",
+            'longtail_keywords': [opportunity['trend'], f"tutoriel {opportunity['trend']}", f"{opportunity['trend']} debutant"],
+            'sections_suggeres': ['Introduction', 'Fondamentaux', 'Techniques', 'Cas pratiques', 'Conclusion']
+        }
     except Exception as e:
         logger.error(f"Error analyzing opportunity: {e}")
         return {
