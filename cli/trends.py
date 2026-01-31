@@ -5,6 +5,7 @@ Monitors Google Trends and creates article briefs as WordPress drafts.
 Usage:
     python -m cli.trends              # Run with core keywords (less API calls)
     python -m cli.trends --full       # Run with all keywords (more API calls, may hit rate limits)
+    python -m cli.trends --offline    # Skip Google Trends, use popular topics from config
     python -m cli.trends --dry-run    # Show what would be created without creating
     python -m cli.trends --trends     # Only show trends without creating drafts
     python -m cli.trends --status     # Check API connectivity
@@ -82,12 +83,45 @@ def show_opportunities(opportunities: list):
                 print(f"     - {article['title'][:50]}...")
 
 
-def run_trends_check(dry_run: bool = False, force_full: bool = False):
+def get_offline_trends() -> dict:
+    """
+    Generate fake trends from config keywords (no Google API calls).
+    Useful when rate-limited by Google.
+    """
+    config = load_config()
+    keywords = config.get('keywords_core', [])
+
+    # Generate fake trends with random-ish interest scores
+    import random
+    predefined = []
+    for keyword in keywords:
+        predefined.append({
+            'keyword': keyword,
+            'category': 'core',
+            'interest': random.randint(40, 80),  # Simulated interest
+            'type': 'predefined'
+        })
+
+    # Sort by "interest"
+    predefined.sort(key=lambda x: x['interest'], reverse=True)
+
+    return {
+        'predefined': predefined,
+        'general': []
+    }
+
+
+def run_trends_check(dry_run: bool = False, force_full: bool = False, offline: bool = False):
     """Main function to check trends and create drafts."""
     logger = logging.getLogger(__name__)
 
     logger.info("=" * 50)
-    mode_str = "FULL mode" if force_full else "CORE mode (8 keywords)"
+    if offline:
+        mode_str = "OFFLINE mode (no Google API)"
+    elif force_full:
+        mode_str = "FULL mode"
+    else:
+        mode_str = "CORE mode (8 keywords)"
     logger.info(f"TrendsToWordPress - Starting ({mode_str})...")
 
     # Initialize database
@@ -98,8 +132,12 @@ def run_trends_check(dry_run: bool = False, force_full: bool = False):
     max_prompts = config.get('matching', {}).get('max_prompts_per_day', 3)
 
     # Fetch trends
-    logger.info("Fetching Google Trends...")
-    trends = fetch_all_trends(force_full=force_full)
+    if offline:
+        logger.info("Using offline mode (no Google Trends API)...")
+        trends = get_offline_trends()
+    else:
+        logger.info("Fetching Google Trends...")
+        trends = fetch_all_trends(force_full=force_full)
 
     show_trends(trends)
 
@@ -192,6 +230,7 @@ def main():
     parser.add_argument('--trends', action='store_true', help='Only show trends without creating drafts')
     parser.add_argument('--status', action='store_true', help='Check API connectivity')
     parser.add_argument('--full', action='store_true', help='Use full keywords list (more API calls, slower)')
+    parser.add_argument('--offline', action='store_true', help='Skip Google Trends API (use when rate-limited)')
 
     args = parser.parse_args()
 
@@ -201,7 +240,10 @@ def main():
 
     if args.trends:
         logger.info("Fetching trends only...")
-        trends = fetch_all_trends(force_full=args.full)
+        if args.offline:
+            trends = get_offline_trends()
+        else:
+            trends = fetch_all_trends(force_full=args.full)
         show_trends(trends)
 
         opportunities = find_opportunities(
@@ -212,7 +254,7 @@ def main():
         return
 
     # Full run
-    run_trends_check(dry_run=args.dry_run, force_full=args.full)
+    run_trends_check(dry_run=args.dry_run, force_full=args.full, offline=args.offline)
 
 
 if __name__ == '__main__':
