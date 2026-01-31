@@ -82,8 +82,9 @@ article_types:
     max_words: 1200
 
 # Scheduling
+# DESACTIVE - Google Trends bloque les IPs qui font trop de requetes
 schedule:
-  enabled: true
+  enabled: false
   time: "07:00"
   timezone: "Europe/Paris"
 
