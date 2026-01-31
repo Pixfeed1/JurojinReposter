@@ -1,6 +1,22 @@
 # Configuration TrendsToWordPress
 # Thématiques à surveiller sur Google Trends
 
+# Mode: 'core' = keywords essentiels uniquement, 'full' = tout
+# Note: 'full' fait beaucoup de requêtes et peut être rate-limité par Google
+mode: core
+
+# Keywords essentiels (mode core) - focus sur les thématiques principales de jurojin.net
+keywords_core:
+  - Blender
+  - Cinema 4D
+  - Maya
+  - ZBrush
+  - Unreal Engine 5
+  - Stable Diffusion
+  - ComfyUI
+  - After Effects
+
+# Keywords complets (mode full) - toutes les thématiques
 keywords:
   3d:
     - Blender
@@ -9,109 +25,34 @@ keywords:
     - ZBrush
     - Substance Painter
     - Houdini
-    - geometry nodes
-    - sculpting
-    - procedural modeling
-    - Blender 4
-    - Blender 5
-
-  2d:
-    - Photoshop
-    - Procreate
-    - Krita
-    - Clip Studio Paint
-    - digital painting
-    - concept art
-    - illustration numerique
 
   vfx:
     - After Effects
     - Nuke
     - DaVinci Resolve
-    - compositing
-    - motion design
     - VFX
-    - effets speciaux
-
-  hardware:
-    - Wacom
-    - XP-Pen
-    - tablette graphique
-    - Huion
-    - GPU render
-    - RTX 5090
-    - Apple M4
-
-  cao:
-    - AutoCAD
-    - SketchUp
-    - Fusion 360
-    - FreeCAD
-    - modelisation 3D
-    - impression 3D
 
   moteurs:
-    - Unreal Engine
+    - Unreal Engine 5
     - Unity
     - Godot
-    - Unreal Engine 5
-    - game engine
-    - MetaHuman
 
   ia_generative:
     - Stable Diffusion
     - Midjourney
     - ComfyUI
-    - ControlNet
-    - DALL-E
     - Sora
-    - AI art
-    - IA generative
     - Flux AI
 
-  reseaux_sociaux:
-    - Twitter
-    - Instagram
-    - TikTok
-    - YouTube
-    - Bluesky
-    - algorithme
-    - engagement
-    - monetisation
-
-  cinema_series:
-    - cyberpunk
-    - dystopie
-    - Blade Runner
-    - Matrix
-    - Black Mirror
-    - Akira
-    - science fiction
-    - anime film
-
-  anime:
-    - Dragon Ball
-    - Naruto
-    - One Piece
-    - anime
-    - manga
-    - Akira Toriyama
-    - Studio Ghibli
-    - Chainsaw Man
-
-  pop_culture:
-    - Michael Jackson
-    - Terminator
-    - Star Wars
-    - Marvel
-    - DC Comics
-    - retro gaming
+  hardware:
+    - Wacom
+    - tablette graphique
+    - RTX 5090
 
 # Catégories de trends générales à scanner (Google Trends)
-general_categories:
-  - technology
-  - entertainment
-  - games
+# Désactivé par défaut car très gourmand en requêtes
+general_categories: []
+# Pour activer: ['technology', 'entertainment']
 
 # Matching config
 matching:

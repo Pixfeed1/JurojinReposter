@@ -3,8 +3,9 @@ CLI command for TrendsToWordPress.
 Monitors Google Trends and creates article briefs as WordPress drafts.
 
 Usage:
-    python -m cli.trends              # Full run (fetch trends + create drafts)
-    python -m cli.trends --dry-run    # Show what would be created
+    python -m cli.trends              # Run with core keywords (less API calls)
+    python -m cli.trends --full       # Run with all keywords (more API calls, may hit rate limits)
+    python -m cli.trends --dry-run    # Show what would be created without creating
     python -m cli.trends --trends     # Only show trends without creating drafts
     python -m cli.trends --status     # Check API connectivity
 """
@@ -19,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config.settings import LOG_PATH, BASE_DIR
 from core.database import init_database
-from sources.google_trends import fetch_all_trends
+from sources.google_trends import fetch_all_trends, fetch_predefined_trends
 from core.article_matcher import find_opportunities, get_best_opportunities
 from ai.prompt_generator import generate_article_brief
 from publishers.wordpress_draft import publish_brief, check_api_status
@@ -81,12 +82,13 @@ def show_opportunities(opportunities: list):
                 print(f"     - {article['title'][:50]}...")
 
 
-def run_trends_check(dry_run: bool = False):
+def run_trends_check(dry_run: bool = False, force_full: bool = False):
     """Main function to check trends and create drafts."""
     logger = logging.getLogger(__name__)
 
     logger.info("=" * 50)
-    logger.info("TrendsToWordPress - Starting...")
+    mode_str = "FULL mode" if force_full else "CORE mode (8 keywords)"
+    logger.info(f"TrendsToWordPress - Starting ({mode_str})...")
 
     # Initialize database
     init_database()
@@ -97,7 +99,7 @@ def run_trends_check(dry_run: bool = False):
 
     # Fetch trends
     logger.info("Fetching Google Trends...")
-    trends = fetch_all_trends()
+    trends = fetch_all_trends(force_full=force_full)
 
     show_trends(trends)
 
@@ -189,6 +191,7 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Show what would be created without creating')
     parser.add_argument('--trends', action='store_true', help='Only show trends without creating drafts')
     parser.add_argument('--status', action='store_true', help='Check API connectivity')
+    parser.add_argument('--full', action='store_true', help='Use full keywords list (more API calls, slower)')
 
     args = parser.parse_args()
 
@@ -198,7 +201,7 @@ def main():
 
     if args.trends:
         logger.info("Fetching trends only...")
-        trends = fetch_all_trends()
+        trends = fetch_all_trends(force_full=args.full)
         show_trends(trends)
 
         opportunities = find_opportunities(
@@ -209,7 +212,7 @@ def main():
         return
 
     # Full run
-    run_trends_check(dry_run=args.dry_run)
+    run_trends_check(dry_run=args.dry_run, force_full=args.full)
 
 
 if __name__ == '__main__':
