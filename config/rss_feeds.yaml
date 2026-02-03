@@ -3,6 +3,8 @@
 
 # Paramètres généraux
 settings:
+  # DÉSACTIVÉ - À retravailler plus tard
+  enabled: false
   # Nombre d'heures à regarder en arrière
   lookback_hours: 48
   # Score minimum de pertinence (0-10) pour générer un brief

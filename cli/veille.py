@@ -282,6 +282,15 @@ def main():
 
     args = parser.parse_args()
 
+    # Check if module is enabled
+    config = load_config()
+    if not config.get('settings', {}).get('enabled', True):
+        if args.command != 'status':
+            print("\n⚠️  MODULE VEILLE DÉSACTIVÉ")
+            print("   Le module est désactivé dans config/rss_feeds.yaml")
+            print("   Utilisez 'status' pour voir les stats ou réactivez le module.")
+            sys.exit(0)
+
     if args.command == 'fetch':
         cmd_fetch()
     elif args.command == 'analyze':
