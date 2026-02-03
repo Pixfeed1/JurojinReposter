@@ -301,6 +301,59 @@ def publish_brief(brief: dict, dry_run: bool = False) -> dict:
     )
 
 
+def publish_veille_brief(brief_data: dict, source_article: dict, dry_run: bool = False) -> dict:
+    """
+    Publish a veille brief as a WordPress draft.
+
+    Args:
+        brief_data: Dict from generate_brief() in brief_generator
+        source_article: Original RSS article dict
+        dry_run: If True, don't actually create the post
+
+    Returns:
+        Result dict from create_draft()
+    """
+    from ai.brief_generator import format_brief_for_wordpress
+
+    # Format the content
+    content = format_brief_for_wordpress(brief_data, source_article)
+
+    # Add [BRIEF] prefix to title
+    title = f"[BRIEF] {brief_data.get('title', source_article.get('title', 'Sans titre'))}"
+
+    # Determine category from source category
+    category_mapping = {
+        '3d_vfx': 'Arts Numérique',
+        'tech_ia': 'Actualités',
+        'gaming': 'Gaming',
+        'cinema_anime': 'Cinéma',
+        'tech_fr': 'Actualités'
+    }
+    category = category_mapping.get(source_article.get('category', ''), 'Actualités')
+
+    # Extract tags from keywords
+    tags = []
+    if brief_data.get('keyword_main'):
+        tags.append(brief_data['keyword_main'])
+    if brief_data.get('keywords_longtail'):
+        # Split comma or semicolon separated
+        longtail = brief_data['keywords_longtail']
+        for sep in [',', ';', '/', '-']:
+            if sep in longtail:
+                tags.extend([t.strip() for t in longtail.split(sep) if t.strip()])
+                break
+        else:
+            tags.append(longtail)
+
+    return create_draft(
+        title=title,
+        content=content,
+        category=category,
+        tags=tags[:5],  # Limit tags
+        dry_run=dry_run
+    )
+
+
 def check_api_status() -> dict:
     """
     Check WordPress API connectivity and credentials.

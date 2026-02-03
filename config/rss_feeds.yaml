@@ -1,0 +1,164 @@
+# Configuration des flux RSS pour la veille JurojinReposter
+# Module de veille sans Google Trends (pas de risque de blocage IP)
+
+# Paramètres généraux
+settings:
+  # Nombre d'heures à regarder en arrière
+  lookback_hours: 48
+  # Score minimum de pertinence (0-10) pour générer un brief
+  min_relevance_score: 7
+  # Nombre max de briefs à générer par run
+  max_briefs_per_run: 5
+  # Délai entre les requêtes RSS (secondes)
+  request_delay: 1
+
+# Flux RSS par catégorie
+feeds:
+  # 3D / Arts numériques / VFX
+  3d_vfx:
+    - name: "Blender.org"
+      url: "https://www.blender.org/feed/"
+      language: "en"
+      priority: high
+
+    - name: "Blender Nation"
+      url: "https://www.blendernation.com/feed/"
+      language: "en"
+      priority: high
+
+    - name: "80 Level"
+      url: "https://80.lv/feed"
+      language: "en"
+      priority: high
+
+    - name: "Unreal Engine"
+      url: "https://www.unrealengine.com/en-US/feed"
+      language: "en"
+      priority: high
+
+    - name: "Adobe Blog"
+      url: "https://blog.adobe.com/en/publish/feed.xml"
+      language: "en"
+      priority: medium
+
+    - name: "Creative Bloq"
+      url: "https://www.creativebloq.com/feed"
+      language: "en"
+      priority: medium
+
+  # Tech / IA / Sécurité
+  tech_ia:
+    - name: "The Verge"
+      url: "https://www.theverge.com/rss/index.xml"
+      language: "en"
+      priority: medium
+
+    - name: "Ars Technica"
+      url: "https://feeds.arstechnica.com/arstechnica/index"
+      language: "en"
+      priority: medium
+
+    - name: "Krebs on Security"
+      url: "https://krebsonsecurity.com/feed/"
+      language: "en"
+      priority: high
+
+    - name: "MIT Tech Review"
+      url: "https://www.technologyreview.com/feed/"
+      language: "en"
+      priority: medium
+
+  # Gaming
+  gaming:
+    - name: "IGN"
+      url: "https://feeds.feedburner.com/ign/all"
+      language: "en"
+      priority: low
+
+    - name: "Kotaku"
+      url: "https://kotaku.com/rss"
+      language: "en"
+      priority: medium
+
+    - name: "PC Gamer"
+      url: "https://www.pcgamer.com/rss/"
+      language: "en"
+      priority: medium
+
+  # Cinéma / Séries / Anime
+  cinema_anime:
+    - name: "Crunchyroll News"
+      url: "https://www.crunchyroll.com/newsrss?lang=enUS"
+      language: "en"
+      priority: high
+
+    - name: "Anime News Network"
+      url: "https://www.animenewsnetwork.com/all/rss.xml"
+      language: "en"
+      priority: high
+
+    - name: "Allociné"
+      url: "https://rss.allocine.fr/ac/actualites"
+      language: "fr"
+      priority: medium
+
+  # Tech FR
+  tech_fr:
+    - name: "Numerama"
+      url: "https://www.numerama.com/feed/"
+      language: "fr"
+      priority: high
+
+    - name: "Korben"
+      url: "https://korben.info/feed"
+      language: "fr"
+      priority: high
+
+# Mots-clés pour booster le score de pertinence
+boost_keywords:
+  high_boost:  # +3 points
+    - Blender
+    - Cinema 4D
+    - Maya
+    - ZBrush
+    - Substance Painter
+    - Houdini
+    - Unreal Engine
+    - Unity
+    - Stable Diffusion
+    - Midjourney
+    - ComfyUI
+
+  medium_boost:  # +2 points
+    - After Effects
+    - Nuke
+    - DaVinci Resolve
+    - Photoshop
+    - Procreate
+    - Wacom
+    - VFX
+    - 3D
+    - animation
+    - rendering
+    - GPU
+    - RTX
+
+  low_boost:  # +1 point
+    - cyberpunk
+    - Dragon Ball
+    - Naruto
+    - One Piece
+    - anime
+    - manga
+    - science fiction
+    - IA
+    - AI
+    - intelligence artificielle
+
+# Catégories WordPress pour le mapping
+wordpress_categories:
+  3d_vfx: "Arts Numérique"
+  tech_ia: "Actualités"
+  gaming: "Gaming"
+  cinema_anime: "Cinéma"
+  tech_fr: "Actualités"

@@ -681,3 +681,258 @@ def find_related_article(title: str, category: str = None) -> Optional[dict]:
 
     conn.close()
     return None
+
+
+# === RSS Veille Module ===
+
+def init_veille_tables() -> None:
+    """Initialize tables for RSS veille module."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # RSS articles table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS rss_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT UNIQUE NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT,
+            source_name TEXT NOT NULL,
+            source_url TEXT,
+            category TEXT,
+            language TEXT DEFAULT 'en',
+            priority TEXT DEFAULT 'medium',
+            author TEXT,
+            published_at TIMESTAMP,
+            fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            relevance_score INTEGER,
+            relevance_analyzed_at TIMESTAMP,
+            brief_generated BOOLEAN DEFAULT FALSE,
+            brief_generated_at TIMESTAMP,
+            wp_draft_id INTEGER,
+            wp_draft_url TEXT
+        )
+    """)
+
+    # Briefs generated table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS veille_briefs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rss_article_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            keyword_main TEXT,
+            keywords_longtail TEXT,
+            angle TEXT,
+            structure TEXT,
+            external_sources TEXT,
+            internal_links TEXT,
+            word_count_target INTEGER,
+            tone_notes TEXT,
+            full_brief TEXT NOT NULL,
+            wp_draft_id INTEGER,
+            wp_draft_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (rss_article_id) REFERENCES rss_articles(id)
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+    logger.info("Veille tables initialized")
+
+
+@retry_on_lock
+def save_rss_article(article: dict) -> Optional[int]:
+    """Save an RSS article to the database. Returns article ID or None if duplicate."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            INSERT INTO rss_articles (
+                url, title, summary, source_name, source_url,
+                category, language, priority, author, published_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            article['url'],
+            article['title'],
+            article.get('summary', ''),
+            article['source_name'],
+            article.get('source_url', ''),
+            article.get('category', ''),
+            article.get('language', 'en'),
+            article.get('priority', 'medium'),
+            article.get('author', ''),
+            article.get('published').isoformat() if article.get('published') else None
+        ))
+        conn.commit()
+        article_id = cursor.lastrowid
+        conn.close()
+        return article_id
+    except sqlite3.IntegrityError:
+        # Duplicate URL
+        conn.close()
+        return None
+
+
+def get_rss_articles_for_analysis(limit: int = 50) -> list:
+    """Get RSS articles that haven't been analyzed for relevance yet."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM rss_articles
+        WHERE relevance_score IS NULL
+        ORDER BY published_at DESC
+        LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+@retry_on_lock
+def update_rss_relevance(article_id: int, score: int) -> None:
+    """Update the relevance score of an RSS article."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE rss_articles
+        SET relevance_score = ?, relevance_analyzed_at = ?
+        WHERE id = ?
+    """, (score, datetime.now().isoformat(), article_id))
+    conn.commit()
+    conn.close()
+
+
+def get_relevant_rss_articles(min_score: int = 7, limit: int = 10) -> list:
+    """Get relevant RSS articles that haven't had briefs generated yet."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM rss_articles
+        WHERE relevance_score >= ? AND brief_generated = FALSE
+        ORDER BY relevance_score DESC, published_at DESC
+        LIMIT ?
+    """, (min_score, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+@retry_on_lock
+def save_veille_brief(rss_article_id: int, brief_data: dict) -> int:
+    """Save a generated brief. Returns brief ID."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO veille_briefs (
+            rss_article_id, title, keyword_main, keywords_longtail,
+            angle, structure, external_sources, internal_links,
+            word_count_target, tone_notes, full_brief
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        rss_article_id,
+        brief_data['title'],
+        brief_data.get('keyword_main', ''),
+        brief_data.get('keywords_longtail', ''),
+        brief_data.get('angle', ''),
+        brief_data.get('structure', ''),
+        brief_data.get('external_sources', ''),
+        brief_data.get('internal_links', ''),
+        brief_data.get('word_count_target', 1500),
+        brief_data.get('tone_notes', ''),
+        brief_data['full_brief']
+    ))
+
+    # Mark article as having brief generated
+    cursor.execute("""
+        UPDATE rss_articles
+        SET brief_generated = TRUE, brief_generated_at = ?
+        WHERE id = ?
+    """, (datetime.now().isoformat(), rss_article_id))
+
+    conn.commit()
+    brief_id = cursor.lastrowid
+    conn.close()
+    return brief_id
+
+
+@retry_on_lock
+def update_brief_wp_draft(brief_id: int, wp_draft_id: int, wp_draft_url: str) -> None:
+    """Update brief with WordPress draft info."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE veille_briefs
+        SET wp_draft_id = ?, wp_draft_url = ?
+        WHERE id = ?
+    """, (wp_draft_id, wp_draft_url, brief_id))
+
+    # Also update the RSS article
+    cursor.execute("""
+        UPDATE rss_articles
+        SET wp_draft_id = ?, wp_draft_url = ?
+        WHERE id = (SELECT rss_article_id FROM veille_briefs WHERE id = ?)
+    """, (wp_draft_id, wp_draft_url, brief_id))
+
+    conn.commit()
+    conn.close()
+
+
+def is_rss_article_known(url: str) -> bool:
+    """Check if an RSS article URL is already in the database."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM rss_articles WHERE url = ?", (url,))
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None
+
+
+def get_veille_stats() -> dict:
+    """Get statistics about the veille module."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    stats = {}
+
+    # Total RSS articles
+    cursor.execute("SELECT COUNT(*) as count FROM rss_articles")
+    stats['total_rss_articles'] = cursor.fetchone()['count']
+
+    # Analyzed articles
+    cursor.execute("SELECT COUNT(*) as count FROM rss_articles WHERE relevance_score IS NOT NULL")
+    stats['analyzed_articles'] = cursor.fetchone()['count']
+
+    # Relevant articles (score >= 7)
+    cursor.execute("SELECT COUNT(*) as count FROM rss_articles WHERE relevance_score >= 7")
+    stats['relevant_articles'] = cursor.fetchone()['count']
+
+    # Briefs generated
+    cursor.execute("SELECT COUNT(*) as count FROM veille_briefs")
+    stats['briefs_generated'] = cursor.fetchone()['count']
+
+    # WordPress drafts created
+    cursor.execute("SELECT COUNT(*) as count FROM veille_briefs WHERE wp_draft_id IS NOT NULL")
+    stats['wp_drafts_created'] = cursor.fetchone()['count']
+
+    # Articles by source
+    cursor.execute("""
+        SELECT source_name, COUNT(*) as count
+        FROM rss_articles
+        GROUP BY source_name
+        ORDER BY count DESC
+        LIMIT 10
+    """)
+    stats['by_source'] = {row['source_name']: row['count'] for row in cursor.fetchall()}
+
+    # Recent articles (last 48h)
+    cursor.execute("""
+        SELECT COUNT(*) as count FROM rss_articles
+        WHERE fetched_at >= datetime('now', '-48 hours')
+    """)
+    stats['recent_articles'] = cursor.fetchone()['count']
+
+    conn.close()
+    return stats
