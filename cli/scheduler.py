@@ -95,7 +95,8 @@ def process_platform(platform: str, logger: logging.Logger) -> bool:
             word_count=article['word_count'],
             score=article['score'],
             previous_hooks=previous_hooks,
-            force_format=None  # Auto mode
+            force_format=None,  # Auto mode
+            category=article.get('category', '')
         )
 
         logger.info(f"Format: {content['format']} ({content['posts_count']} tweet(s))")

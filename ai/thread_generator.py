@@ -10,6 +10,7 @@ from typing import Optional
 from groq import Groq
 
 from config.settings import GROQ_API_KEY, GROQ_MODEL, BASE_DIR
+from ai.hashtags import get_fallback_hashtags, get_hashtag_rule
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -93,9 +94,9 @@ Format :
 Tweet 1 (max 240 chars) : Hook accrocheur, donne envie de lire la suite. Termine par →
 Tweet 2 (max 240 chars) : Premier point cle ou fait interessant
 Tweet 3 (max 240 chars) : Deuxieme point cle ou insight
-Tweet 4 (max 200 chars) : Conclusion + "[LIEN]" + 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #3D #Cinema4D #Animation #CGI etc.)
+Tweet 4 (max 200 chars) : Conclusion + "[LIEN]" + hashtags
 
-IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Exactement 3 hashtags.
+IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. {hashtag_rule}
 
 Reponds UNIQUEMENT avec les 4 tweets separes par ---"""
 
@@ -107,9 +108,9 @@ Extrait : {excerpt}
 Format :
 Tweet 1 (max 240 chars) : Hook accrocheur
 Tweet 2 (max 240 chars) : Point cle principal
-Tweet 3 (max 200 chars) : Conclusion + "[LIEN]" + 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #3D #Cinema4D #Animation #CGI etc.)
+Tweet 3 (max 200 chars) : Conclusion + "[LIEN]" + hashtags
 
-IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. Exactement 3 hashtags.
+IMPORTANT : Les hashtags vont UNIQUEMENT sur le dernier tweet. {hashtag_rule}
 
 Reponds UNIQUEMENT avec les 3 tweets separes par ---"""
 
@@ -120,7 +121,7 @@ Extrait : {excerpt}
 Max 240 caracteres (hashtags inclus).
 {previous_note}
 
-Termine avec 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #3D #Cinema4D #Animation #CGI etc.).
+{hashtag_rule}
 
 Reponds uniquement avec l'accroche, sans guillemets ni explication."""
 
@@ -141,7 +142,7 @@ def parse_thread_response(response: str, expected_count: int) -> list:
 
 
 def generate_thread_groq(client: Groq, title: str, excerpt: str,
-                         thread_type: str) -> Optional[list]:
+                         thread_type: str, category: str = "") -> Optional[list]:
     """Generate a thread using Groq API."""
     now = datetime.now()
     current_date = now.strftime("%d %B %Y")
@@ -150,12 +151,15 @@ def generate_thread_groq(client: Groq, title: str, excerpt: str,
         current_date=current_date,
         current_year=current_year
     )
+    hashtag_rule = get_hashtag_rule(category)
 
     if thread_type == 'thread_4':
-        prompt = THREAD_4_PROMPT.format(title=title, excerpt=excerpt[:400])
+        prompt = THREAD_4_PROMPT.format(title=title, excerpt=excerpt[:400],
+                                        hashtag_rule=hashtag_rule)
         expected_count = 4
     else:
-        prompt = THREAD_3_PROMPT.format(title=title, excerpt=excerpt[:400])
+        prompt = THREAD_3_PROMPT.format(title=title, excerpt=excerpt[:400],
+                                        hashtag_rule=hashtag_rule)
         expected_count = 3
 
     try:
@@ -185,7 +189,7 @@ def generate_thread_groq(client: Groq, title: str, excerpt: str,
 
 
 def generate_simple_groq(client: Groq, title: str, excerpt: str,
-                         previous_hooks: list) -> Optional[str]:
+                         previous_hooks: list, category: str = "") -> Optional[str]:
     """Generate a simple tweet using Groq API."""
     now = datetime.now()
     current_date = now.strftime("%d %B %Y")
@@ -202,7 +206,8 @@ def generate_simple_groq(client: Groq, title: str, excerpt: str,
     prompt = SIMPLE_PROMPT.format(
         title=title,
         excerpt=excerpt[:300],
-        previous_note=previous_note
+        previous_note=previous_note,
+        hashtag_rule=get_hashtag_rule(category)
     )
 
     try:
@@ -236,49 +241,56 @@ def generate_simple_groq(client: Groq, title: str, excerpt: str,
         return None
 
 
-# Fallback templates (avec hashtags sur le dernier tweet/tweet simple)
+# Fallback templates (hashtags choisis selon la categorie de l'article,
+# vides si la categorie est inconnue — jamais de hashtags hors sujet)
 THREAD_FALLBACK_3 = [
     "{title} - un article qui merite votre attention →",
     "Voici ce qu'il faut retenir de cet article complet sur le sujet.",
-    "L'article complet a decouvrir ici [LIEN] #3D #CGI #Blender3D"
+    "L'article complet a decouvrir ici [LIEN]{hashtags}"
 ]
 
 THREAD_FALLBACK_4 = [
     "{title} - un sujet passionnant a decouvrir →",
     "Premier point cle : cet article couvre en profondeur tous les aspects du sujet.",
     "Deuxieme point : des conseils pratiques et des exemples concrets.",
-    "Pour aller plus loin, l'article complet est ici [LIEN] #3D #VFX #CGI"
+    "Pour aller plus loin, l'article complet est ici [LIEN]{hashtags}"
 ]
 
 SIMPLE_FALLBACK = [
-    "{title} - a relire #3D #CGI #Blender3D",
-    "Un article qui merite qu'on y revienne : {title} #Blender3D #3D #CGI",
-    "{title} - toujours d'actualite #VFX #3D #Animation",
+    "{title} - a relire{hashtags}",
+    "Un article qui merite qu'on y revienne : {title}{hashtags}",
+    "{title} - toujours d'actualite{hashtags}",
 ]
 
 
-def generate_fallback_thread(title: str, thread_type: str) -> list:
-    """Generate a fallback thread when Groq is unavailable."""
-    import random
+def _fallback_hashtag_suffix(category: str) -> str:
+    hashtags = get_fallback_hashtags(category)
+    return f" {hashtags}" if hashtags else ""
 
+
+def generate_fallback_thread(title: str, thread_type: str, category: str = "") -> list:
+    """Generate a fallback thread when Groq is unavailable."""
     if thread_type == 'thread_4':
         templates = THREAD_FALLBACK_4.copy()
     else:
         templates = THREAD_FALLBACK_3.copy()
 
-    return [t.format(title=title[:100]) for t in templates]
+    hashtags = _fallback_hashtag_suffix(category)
+    return [t.format(title=title[:100], hashtags=hashtags) for t in templates]
 
 
-def generate_fallback_simple(title: str) -> str:
+def generate_fallback_simple(title: str, category: str = "") -> str:
     """Generate a fallback simple tweet when Groq is unavailable."""
     import random
     template = random.choice(SIMPLE_FALLBACK)
-    return template.format(title=title[:150])
+    return template.format(title=title[:150],
+                           hashtags=_fallback_hashtag_suffix(category))
 
 
 def generate_twitter_content(title: str, excerpt: str, word_count: int,
                              score: int, previous_hooks: list = None,
-                             force_format: Optional[str] = None) -> dict:
+                             force_format: Optional[str] = None,
+                             category: str = "") -> dict:
     """
     Generate Twitter content - either a simple tweet or a thread.
 
@@ -289,6 +301,7 @@ def generate_twitter_content(title: str, excerpt: str, word_count: int,
         score: Article score
         previous_hooks: List of previously used hooks to avoid
         force_format: Force format ('simple', 'thread', or None for auto)
+        category: Article category slug, used to pick relevant hashtags
 
     Returns:
         {
@@ -312,11 +325,12 @@ def generate_twitter_content(title: str, excerpt: str, word_count: int,
         # Generate thread
         tweets = None
         if client:
-            tweets = generate_thread_groq(client, title, excerpt, format_type)
+            tweets = generate_thread_groq(client, title, excerpt, format_type,
+                                          category=category)
 
         if not tweets:
-            logger.info("Using fallback thread templates")
-            tweets = generate_fallback_thread(title, format_type)
+            logger.warning("FALLBACK: Groq unavailable, using thread templates")
+            tweets = generate_fallback_thread(title, format_type, category=category)
 
         return {
             "type": "thread",
@@ -329,11 +343,12 @@ def generate_twitter_content(title: str, excerpt: str, word_count: int,
         # Generate simple tweet
         tweet = None
         if client:
-            tweet = generate_simple_groq(client, title, excerpt, previous_hooks)
+            tweet = generate_simple_groq(client, title, excerpt, previous_hooks,
+                                         category=category)
 
         if not tweet:
-            logger.info("Using fallback simple template")
-            tweet = generate_fallback_simple(title)
+            logger.warning("FALLBACK: Groq unavailable, using simple template")
+            tweet = generate_fallback_simple(title, category=category)
 
         return {
             "type": "simple",

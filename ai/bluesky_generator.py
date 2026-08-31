@@ -10,22 +10,9 @@ from typing import Optional
 from groq import Groq
 
 from config.settings import GROQ_API_KEY, GROQ_MODEL
+from ai.hashtags import get_fallback_hashtags, get_hashtag_rule
 
 logger = logging.getLogger(__name__)
-
-# Hashtags par categorie
-HASHTAGS_MAP = {
-    "blender": "#Blender3D #b3d #3Dart",
-    "tutoriels": "#Blender3D #Tuto3D #3D",
-    "logiciels-3d": "#3D #CGI #Software",
-    "cinema-4d": "#Cinema4D #C4D #3D",
-    "after-effects": "#AfterEffects #MotionDesign #VFX",
-    "vfx": "#VFX #VisualEffects #CGI",
-    "cinema": "#Cinema #Film #Movie",
-    "actualites": "#Geek #Actu #Tech",
-    "anime": "#Anime #Manga #Japan",
-    "musique": "#Musique #Music #Album",
-}
 
 THREAD_PROMPT = """Tu es le community manager de Jurojin.net, blog francais sur la 3D, le cinema et la culture geek.
 Date actuelle : {current_date}
@@ -37,7 +24,7 @@ REGLES :
 - Max 280 caracteres par post (pour laisser place au lien sur le dernier)
 - 1-2 emojis max par post, pas plus
 - Le dernier post contient [LIEN] qui sera remplace par l'URL
-- Ajoute les hashtags UNIQUEMENT sur le dernier post : 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
+- Hashtags UNIQUEMENT sur le dernier post. {hashtag_rule}
 - IMPORTANT : Si tu mentionnes une annee, nous sommes en {current_year}
 
 STRUCTURE DU THREAD :
@@ -64,7 +51,7 @@ REGLES ABSOLUES :
 - Max 250 caracteres (laisser place au lien)
 - 1-2 emojis max, ou zero
 - Terminer par [LIEN]
-- Ajouter les hashtags a la fin : 3 hashtags pertinents que tu choisis selon le sujet (ex: #Blender3D #VFX #Cinema4D #Animation #3D #CGI etc.)
+- Hashtags a la fin. {hashtag_rule}
 - IMPORTANT : Si tu mentionnes une annee, nous sommes en {current_year}
 
 FORMATS (choisis le plus adapte) :
@@ -129,14 +116,14 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
 
     client = get_groq_client()
     if not client:
-        # Fallback with default hashtags
-        fallback = f"{title[:200]} [LIEN] #3D #CGI #Blender3D"
-        return {"type": "simple", "posts": [fallback]}
+        logger.warning("FALLBACK: Groq client unavailable, using template post")
+        return {"type": "simple", "posts": [_build_fallback(title, category, post_type)]}
 
     try:
         now = datetime.now()
         current_date = now.strftime("%d %B %Y")
         current_year = now.year
+        hashtag_rule = get_hashtag_rule(category, post_type)
 
         if is_thread:
             prompt = THREAD_PROMPT.format(
@@ -144,7 +131,8 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
                 title=title,
                 excerpt=excerpt[:400],
                 current_date=current_date,
-                current_year=current_year
+                current_year=current_year,
+                hashtag_rule=hashtag_rule
             )
         else:
             previous_str = ", ".join(previous_posts[:3]) if previous_posts else "Aucun"
@@ -155,7 +143,8 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
                 excerpt=excerpt[:300],
                 previous_posts=previous_str,
                 current_date=current_date,
-                current_year=current_year
+                current_year=current_year,
+                hashtag_rule=hashtag_rule
             )
 
         response = client.chat.completions.create(
@@ -184,6 +173,12 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
 
     except Exception as e:
         logger.error(f"Error generating Bluesky content: {e}")
-        # Fallback
-        fallback = f"{title[:200]} [LIEN] #3D #CGI #Blender3D"
-        return {"type": "simple", "posts": [fallback]}
+        logger.warning("FALLBACK: Groq call failed, using template post")
+        return {"type": "simple", "posts": [_build_fallback(title, category, post_type)]}
+
+
+def _build_fallback(title: str, category: str, post_type: str) -> str:
+    """Template post used when Groq is unavailable, with category-aware hashtags."""
+    hashtags = get_fallback_hashtags(category, post_type)
+    suffix = f" {hashtags}" if hashtags else ""
+    return f"{title[:200]} [LIEN]{suffix}"

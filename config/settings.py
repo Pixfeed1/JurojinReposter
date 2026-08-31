@@ -30,7 +30,9 @@ WORDPRESS_POST_TYPES = [
 
 # API Keys (set via environment variables or directly here)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# Overridable via .env : si Groq retire ce modele du catalogue, chaque appel
+# echoue et tous les posts partent en template fallback.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # Facebook Graph API
 FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "")
