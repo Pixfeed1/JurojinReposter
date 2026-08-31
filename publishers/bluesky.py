@@ -5,6 +5,7 @@ Posts content to Bluesky with support for links (facets), images and threads.
 
 import logging
 import os
+import time
 import requests
 from typing import Optional
 
@@ -12,9 +13,14 @@ from atproto import Client, models
 
 logger = logging.getLogger(__name__)
 
+# Le serveur a des hoquets DNS/reseau ponctuels : un login rate ne doit pas
+# faire perdre le creneau de publication, on reessaie avant d'abandonner.
+LOGIN_ATTEMPTS = 3
+LOGIN_RETRY_DELAY = 10  # secondes, double a chaque tentative
+
 
 def get_bluesky_client() -> Optional[Client]:
-    """Get an authenticated Bluesky client."""
+    """Get an authenticated Bluesky client, retrying on transient failures."""
     handle = os.getenv("BLUESKY_HANDLE")
     app_password = os.getenv("BLUESKY_APP_PASSWORD")
 
@@ -22,13 +28,22 @@ def get_bluesky_client() -> Optional[Client]:
         logger.error("Missing Bluesky credentials (BLUESKY_HANDLE, BLUESKY_APP_PASSWORD)")
         return None
 
-    try:
-        client = Client()
-        client.login(handle, app_password)
-        return client
-    except Exception as e:
-        logger.error(f"Failed to login to Bluesky: {e}")
-        return None
+    delay = LOGIN_RETRY_DELAY
+    for attempt in range(1, LOGIN_ATTEMPTS + 1):
+        try:
+            client = Client()
+            client.login(handle, app_password)
+            return client
+        except Exception as e:
+            # repr(e) : certaines exceptions (timeout, DNS) ont un message vide
+            logger.error(
+                f"Failed to login to Bluesky (attempt {attempt}/{LOGIN_ATTEMPTS}): {e!r}"
+            )
+            if attempt < LOGIN_ATTEMPTS:
+                time.sleep(delay)
+                delay *= 2
+
+    return None
 
 
 def create_link_facets(text: str, url: str) -> list:
