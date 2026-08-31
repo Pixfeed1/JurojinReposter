@@ -29,6 +29,7 @@ CATEGORY_HASHTAGS = {
     "jeux-video": "#JeuxVideo #Gaming",
     # Generaliste — PAS de hashtags 3D ici : ces categories couvrent
     # tous les sujets (reseau, web, materiel, astuces...)
+    "guide-dachat": "#GuideAchat #Hardware #Tech",
     "tutoriels": "#Tuto #Astuce",
     "actualites": "#Tech #Actu",
     "internet": "#Internet #Web",
