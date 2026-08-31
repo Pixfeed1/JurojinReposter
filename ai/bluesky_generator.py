@@ -21,7 +21,8 @@ Genere un thread Bluesky de 4 posts pour cet article.
 
 REGLES :
 - Ton : passionne, expert mais accessible, JAMAIS commercial ou putaclic
-- Max 280 caracteres par post (pour laisser place au lien sur le dernier)
+- Max 280 caracteres par post, SAUF le dernier : max 140 caracteres de texte,
+  car le lien (~70 caracteres) et les hashtags s'y ajoutent (limite totale 300)
 - 1-2 emojis max par post, pas plus
 - Le dernier post contient [LIEN] qui sera remplace par l'URL
 - Hashtags UNIQUEMENT sur le dernier post. {hashtag_rule}

@@ -5,6 +5,7 @@ Posts content to Bluesky with support for links (facets), images and threads.
 
 import logging
 import os
+import re
 import time
 import requests
 from typing import Optional
@@ -71,6 +72,48 @@ def create_link_facets(text: str, url: str) -> list:
     return facets
 
 
+def create_hashtag_facets(text: str) -> list:
+    """
+    Create facets so hashtags are clickable and indexed by Bluesky search.
+    Without a Tag facet, a #hashtag is just plain text on Bluesky.
+    """
+    facets = []
+    for match in re.finditer(r'#(\w+)', text):
+        byte_start = len(text[:match.start()].encode('utf-8'))
+        byte_end = byte_start + len(match.group(0).encode('utf-8'))
+        facets.append(
+            models.AppBskyRichtextFacet.Main(
+                index=models.AppBskyRichtextFacet.ByteSlice(
+                    byteStart=byte_start,
+                    byteEnd=byte_end
+                ),
+                features=[models.AppBskyRichtextFacet.Tag(tag=match.group(1))]
+            )
+        )
+    return facets
+
+
+def truncate_for_bluesky(text: str, url: Optional[str] = None, limit: int = 300) -> str:
+    """
+    Truncate a post to Bluesky's limit WITHOUT losing the URL or the
+    trailing hashtags: the body before the URL is shortened instead of
+    blindly cutting the end of the post.
+    """
+    if len(text) <= limit:
+        return text
+
+    if url and url in text:
+        head, _, tail = text.partition(url)
+        overflow = len(text) - limit + 1  # +1 for the ellipsis
+        new_head_len = len(head.rstrip()) - overflow
+        if new_head_len > 0:
+            return head.rstrip()[:new_head_len] + "…" + url + tail
+        # Body too short to absorb the overflow: keep url + tail only
+        return (url + tail)[:limit]
+
+    return text[:limit - 1] + "…"
+
+
 def upload_image(client: Client, image_url: str) -> Optional[models.AppBskyEmbedImages.Main]:
     """Download and upload an image to Bluesky."""
     try:
@@ -120,14 +163,15 @@ def post_to_bluesky(text: str, url: Optional[str] = None,
         if url and url not in text:
             full_text = f"{text}\n{url}"
 
-        # Truncate if too long (Bluesky limit is 300 chars)
-        if len(full_text) > 300:
-            full_text = full_text[:297] + "..."
+        # Truncate if too long (Bluesky limit is 300 chars),
+        # preserving the URL and trailing hashtags
+        full_text = truncate_for_bluesky(full_text, url)
 
-        # Create facets for clickable link
+        # Facets: clickable link + clickable/indexed hashtags
         facets = []
         if url:
-            facets = create_link_facets(full_text, url)
+            facets.extend(create_link_facets(full_text, url))
+        facets.extend(create_hashtag_facets(full_text))
 
         # Upload image if provided
         embed = None
@@ -184,14 +228,15 @@ def post_thread_to_bluesky(tweets: list, url: Optional[str] = None,
                 if url not in tweet_text:
                     tweet_text = f"{tweet_text}\n{url}"
 
-            # Truncate if too long
-            if len(tweet_text) > 300:
-                tweet_text = tweet_text[:297] + "..."
+            # Truncate if too long, preserving the URL and trailing hashtags
+            is_last = i == len(tweets) - 1
+            tweet_text = truncate_for_bluesky(tweet_text, url if is_last else None)
 
-            # Create facets for URL in last post
+            # Facets: clickable link on last post + hashtags everywhere
             facets = []
-            if i == len(tweets) - 1 and url:
-                facets = create_link_facets(tweet_text, url)
+            if is_last and url:
+                facets.extend(create_link_facets(tweet_text, url))
+            facets.extend(create_hashtag_facets(tweet_text))
 
             # Image only on first post
             embed = None
