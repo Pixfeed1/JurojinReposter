@@ -169,11 +169,13 @@ def generate_thread_groq(client: Groq, title: str, excerpt: str,
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=500,
+            # Marge pour les modeles raisonneurs (gpt-oss...) qui consomment
+            # des tokens de reflexion avant d'ecrire la reponse.
+            max_tokens=3000,
             temperature=0.7
         )
 
-        content = response.choices[0].message.content.strip()
+        content = (response.choices[0].message.content or "").strip()
         tweets = parse_thread_response(content, expected_count)
 
         if len(tweets) >= expected_count - 1:  # Allow one less tweet as fallback
@@ -217,11 +219,15 @@ def generate_simple_groq(client: Groq, title: str, excerpt: str,
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=150,
+            # Marge pour les modeles raisonneurs (voir generate_thread_groq)
+            max_tokens=2000,
             temperature=0.7
         )
 
-        tweet = response.choices[0].message.content.strip()
+        tweet = (response.choices[0].message.content or "").strip()
+        if not tweet:
+            logger.warning("Groq returned empty content, falling back")
+            return None
 
         # Remove quotes if present
         if tweet.startswith('"') and tweet.endswith('"'):

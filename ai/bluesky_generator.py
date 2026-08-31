@@ -152,14 +152,21 @@ def generate_bluesky_content(title: str, excerpt: str, category: str,
             messages=[
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=500,
+            # Large marge : les modeles raisonneurs (gpt-oss...) consomment
+            # des tokens de reflexion AVANT d'ecrire la reponse. Avec un
+            # plafond trop bas, la reponse finale revient vide.
+            max_tokens=3000,
             temperature=0.8
         )
 
-        content = response.choices[0].message.content.strip()
+        content = (response.choices[0].message.content or "").strip()
+        if not content:
+            raise ValueError("Groq returned empty content (max_tokens too low for reasoning model?)")
 
         if is_thread:
             posts = [p.strip() for p in content.split("---") if p.strip()]
+            if not posts:
+                raise ValueError(f"Could not parse thread posts from Groq response: {content[:200]}")
             logger.info(f"Generated Bluesky thread with {len(posts)} posts")
             return {"type": "thread", "posts": posts}
         else:
