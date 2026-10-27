@@ -27,3 +27,8 @@
 
 # Unfollow non-followers: once per day at 7:00
 0 7 * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.follow unfollow >> /path/to/jurojin-reposter/logs/cron.log 2>&1
+
+# === CRM Diffuseur -> Bluesky ===
+# Publishes the posts validated in the CRM (Diffuseur module) at their scheduled time.
+# Every 15 minutes, one post per run at most.
+*/15 * * * * cd /path/to/jurojin-reposter && /path/to/python -m cli.crm_inbox >> /path/to/jurojin-reposter/logs/cron.log 2>&1

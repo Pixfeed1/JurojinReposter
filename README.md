@@ -195,3 +195,19 @@ jurojin-reposter/
 ## Licence
 
 MIT
+
+## CRM Diffuseur → Bluesky (`cli.crm_inbox`)
+
+Le module Diffuseur du CRM dépose chaque publication Bluesky **validée** dans `data/crm_inbox/`
+(`crm-<id>.json` : texte final, lien, chemin de l'image, texte alternatif, heure UTC de publication).
+`python -m cli.crm_inbox`, lancé toutes les 15 minutes par cron, publie ce qui est arrivé à échéance
+avec le module Bluesky existant (même compte, mêmes identifiants `.env`), puis écrit le résultat dans
+`data/crm_outbox/` ; le CRM le relit et affiche « publiée » ou l'erreur.
+
+- une publication par passage au plus ;
+- jamais sans son image : un échec d'envoi de l'image est une erreur ;
+- 3 essais, un par passage, puis erreur définitive ;
+- plus de 24 h de retard : pas publiée, à replanifier dans le CRM ;
+- `--dry-run` montre ce qui serait publié sans rien envoyer.
+
+Tests : `python -m unittest discover -s tests -v` (aucun appel réseau).
